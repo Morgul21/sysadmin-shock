@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "breakfix-lab"
+version = "0.1.0"
+description = "Break & Fix Lab: ambienti Linux rotti (permessi e memoria) da diagnosticare e riparare, via MCP"
+readme = "README.md"
+# datapizza-ai non supporta ancora Python 3.14
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "datapizza-ai>=0.1,<0.2",
+  "datapizza-ai-clients-openai",
+  # datapizza.tools.MCPClient usa l'API di MCP v1 (streamablehttp_client): con mcp 2.x non si importa
+  "mcp>=1.20,<2",
+  "pydantic>=2,<3",
+]
+
+[project.optional-dependencies]
+anthropic = ["datapizza-ai-clients-anthropic"]
+google = ["datapizza-ai-clients-google"]
+
+[project.scripts]
+breakfix-server = "breakfix.server:main"
+breakfix-agent = "breakfix.agent:main"
+breakfix-sandbox = "breakfix.sandbox:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
