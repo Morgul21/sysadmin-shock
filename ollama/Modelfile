@@ -1,0 +1,11 @@
+# Modello locale per l'agente: qwen3 4B "instruct" (risponde senza thinking) con un contesto più ampio.
+# Ollama parte da 4096 token e, quando sfora, scarta l'inizio della conversazione
+# (system prompt compreso) senza avvisare: con l'output dei comandi succede presto.
+#
+# La variante "instruct", non il tag qwen3:4b: quello è la "thinking" (2507), che
+# ragiona sempre prima di rispondere, anche con il thinking disattivato.
+#
+#   ollama pull qwen3:4b-instruct
+#   ollama create breakfix-qwen3 -f ollama/Modelfile
+FROM qwen3:4b-instruct
+PARAMETER num_ctx 8192

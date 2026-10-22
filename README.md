@@ -52,8 +52,19 @@ py -m pip install --user uv
 py -m uv venv --python 3.12 .venv
 py -m uv pip install --python .venv\Scripts\python.exe -e .
 .venv\Scripts\Activate.ps1
-copy .env.example .env   # poi inserisci la API key
+copy .env.example .env   # di default usa Ollama in locale: nessuna API key
 ```
+
+**Modello locale (default).** Installa [Ollama](https://ollama.com), poi:
+
+```powershell
+ollama pull qwen3:4b-instruct
+ollama create breakfix-qwen3 -f ollama/Modelfile   # stesso modello, contesto a 8192 token
+```
+
+Gira anche solo su CPU: con un Core Ultra 7 (32 GB) fa circa 18 token/s e un giro del fixer
+sulla sandbox mock dura meno di un minuto. Per usare un modello cloud imposta `LLM_PROVIDER` e la
+sua API key nel `.env` (vedi [Configurazione](#configurazione)).
 
 ## Avvio
 
@@ -85,8 +96,9 @@ Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>
 
 | Variabile | Default | Note |
 |---|---|---|
-| `LLM_PROVIDER` | `openai` | `openai`, `anthropic`, `google`, ... (via `ClientFactory`; extra `pip install -e .[anthropic]`) |
-| `LLM_MODEL` | `gpt-5.6-luna` per openai, `claude-opus-5-5` per anthropic | obbligatoria per gli altri provider |
+| `LLM_PROVIDER` | `openai` (il `.env.example` imposta `ollama`) | `ollama`, `openai`, `anthropic`, `google`, ... (via `ClientFactory`; extra `pip install -e .[anthropic]`) |
+| `LLM_MODEL` | `breakfix-qwen3` per ollama, `gpt-5.6-luna` per openai, `claude-opus-5-5` per anthropic | obbligatoria per gli altri provider |
+| `OLLAMA_BASE_URL` | `http://localhost:11434/v1` | API compatibile OpenAI di Ollama |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` | – | oppure `LLM_API_KEY` |
 | `LLM_TEMPERATURE` | non inviata | da impostare solo per modelli che la supportano |
 | `BREAKFIX_SANDBOX` | `docker` | `mock` per test/demo senza Docker |
@@ -141,4 +153,10 @@ attuale: `--reset-memory`.
 - `datapizza.tools.MCPClient` importa `streamablehttp_client`, rinominato in MCP SDK 2.x: il progetto fissa `mcp<2` e usa FastMCP v1.
 - `ContextTracing` tiene gli span in memoria e li **cancella all'uscita dal trace**: per un audit
   trail persistente vanno letti con `get_spans()` dentro il blocco `with` (lo facciamo nel `finally`).
+- Il tag `qwen3:4b` di Ollama è la variante *thinking* (2507): ragiona sempre, anche con il thinking
+  disattivato, e una risposta di una riga richiede minuti su CPU. Per l'agente serve `qwen3:4b-instruct`.
+- Ollama parte con un contesto di 4096 token e, quando sfora, scarta l'inizio della conversazione
+  senza avvisare: per questo [ollama/Modelfile](ollama/Modelfile) lo porta a 8192.
+- Sulla sandbox mock il modello locale ha scritto "correzione applicata: chmod +x" senza aver
+  eseguito il comando. È il motivo per cui il verdetto lo dà lo script di check, non la risposta dell'agente.
 - `ClientFactory` invia `temperature=0.7` di default e `gpt-5.6-luna` risponde 400: la temperatura va passata esplicitamente (`None` = non inviata).
