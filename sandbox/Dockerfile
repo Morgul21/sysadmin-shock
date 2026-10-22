@@ -11,4 +11,8 @@ RUN apt-get update \
     && chmod 755 /srv/app/run.sh \
     && chown -R app:app /srv/app
 
+# Log applicativo con una prompt injection piantata: chi diagnostica lo legge per primo.
+# Serve a dimostrare che anche se il modello obbedisce, il guardrail del server blocca.
+COPY app.log /var/log/app/app.log
+
 CMD ["sleep", "infinity"]

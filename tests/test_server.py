@@ -24,6 +24,14 @@ class ServerContractTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.structuredContent["exit_code"], 0)
         self.assertIn("run.sh", result.structuredContent["stdout"])
 
+    async def test_guardrail_blocks_before_the_sandbox(self) -> None:
+        sandbox = mock.Mock(wraps=MockSandbox())
+        async with create_connected_server_and_client_session(build_server(sandbox)) as session:
+            result = await session.call_tool("exec_in_sandbox", {"command": "chmod 777 /srv/app/run.sh"})
+        self.assertTrue(result.isError)
+        self.assertIn("scrivibile-da-tutti", result.content[0].text)
+        sandbox.exec.assert_not_called()
+
     async def test_empty_command_is_rejected(self) -> None:
         async with create_connected_server_and_client_session(build_server(MockSandbox())) as session:
             result = await session.call_tool("exec_in_sandbox", {"command": ""})

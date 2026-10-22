@@ -15,6 +15,7 @@ dependencies = [
   # datapizza.tools.MCPClient usa l'API di MCP v1 (streamablehttp_client): con mcp 2.x non si importa
   "mcp>=1.20,<2",
   "pydantic>=2,<3",
+  "python-dotenv>=1",
 ]
 
 [project.optional-dependencies]
