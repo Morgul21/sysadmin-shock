@@ -56,9 +56,15 @@ def build_server(sandbox: Sandbox | None = None) -> FastMCP:
         """Esegue un comando shell nella sandbox Linux e restituisce exit code, stdout e stderr.
 
         Usalo per diagnosticare (ls -l, id, stat, free, ps, cat /proc/meminfo) e poi per
-        riparare (chmod, chown, kill, ...). Un comando alla volta; timeout di pochi secondi.
+        riparare (chmod, chown, kill, ...). Timeout di pochi secondi.
         L'output può essere troncato: in quel caso restringi il comando.
         Le correzioni eccessive (chmod 777, setuid, ...) vengono rifiutate.
+
+        Regole:
+        - `command` è una riga di shell, non una chiamata a questo tool: mai `exec_in_sandbox "..."`.
+        - Sei già root: niente sudo (non è installato).
+        - Un'azione per chiamata: niente ; o && per concatenare una correzione e altro.
+        - Correggi i file esistenti: non creare file o script nuovi (.profile, wrapper, ...).
         """
         blocked = check_command(command)
         if blocked:

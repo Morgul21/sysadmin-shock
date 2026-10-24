@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from datapizza.core.clients.client import Client
 from datapizza.memory import Memory
 
-from .agent import AUDIT_DIR, STATE_DIR, AgentRunError, build_llm_client, run_agent
+from .agent import AUDIT_DIR, STATE_DIR, AgentRunError, build_llm_client, run_agent, utf8_console
 from .lab import DockerLab, Lab, Scenario, get_scenario, load_scenarios
 
 
@@ -108,6 +108,7 @@ async def evaluate(scenarios: list[Scenario], client: Client, lab: Lab) -> list[
 
 
 def main() -> None:
+    utf8_console()
     load_dotenv()
     parser = argparse.ArgumentParser(prog="breakfix-eval", description="Eval del fixer sugli scenari")
     parser.add_argument("scenarios", nargs="*", help="id degli scenari (default: tutti)")

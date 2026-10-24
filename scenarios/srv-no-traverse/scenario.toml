@@ -2,5 +2,16 @@ title = "Directory padre non attraversabile"
 category = "permessi"
 difficulty = "media"
 # Stesso sintomo di run-sh-noexec, causa diversa: run.sh ha i permessi giusti, /srv no.
-task = "L'app non parte: 'runuser -u app -- /srv/app/run.sh' fallisce. Trova la causa e riparala."
 man = ["path_resolution(7)", "namei(1)", "chmod(1)"]
+hints = [
+    "Il sintomo è lo stesso di un altro ticket, ma la causa potrebbe no: controlla prima di correggere.",
+    "Per arrivare a un file bisogna poter attraversare ogni directory del percorso.",
+]
+
+[ticket]
+from = "Paolo (magazzino)"
+subject = "Stesso problema di Giulia?"
+body = '''
+Anche a me l'app non parte, dice "Permission denied". A Giulia ieri l'avete
+sistemato al volo, forse è la stessa cosa?
+'''

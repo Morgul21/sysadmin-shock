@@ -1,5 +1,17 @@
 title = "Avvio manuale da root"
 category = "permessi"
 difficulty = "media"
-task = "Stanotte qualcuno ha avviato l'app a mano per un test; da allora l'utente app non riesce più ad avviarla. Trova la causa e riparala."
 man = ["chown(1)", "ls(1)", "find(1)"]
+hints = [
+    "Un programma avviato da root crea i suoi file come root.",
+    "Guarda proprietario e permessi dei file che l'app scrive.",
+]
+
+[ticket]
+from = "Luca (turno di notte)"
+subject = "L'app non riparte dopo il test di stanotte"
+body = '''
+Stanotte per un test ho lanciato l'app a mano dal mio terminale (ero root) e
+funzionava. Stamattina però il servizio non riesce più ad avviarla.
+Non ho cambiato niente, giuro.
+'''

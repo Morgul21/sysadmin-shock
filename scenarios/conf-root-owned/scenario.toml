@@ -1,5 +1,17 @@
 title = "Configurazione illeggibile"
 category = "permessi"
 difficulty = "facile"
-task = "L'app non parte più dopo che un collega ha modificato la configurazione. Trova la causa e riparala."
 man = ["chown(1)", "chmod(1)", "stat(1)"]
+hints = [
+    "Il contenuto del file è giusto: guarda chi può leggerlo.",
+    "Il file contiene una password: la correzione non deve renderlo leggibile a tutti.",
+]
+
+[ticket]
+from = "Andrea (IT)"
+subject = "Dopo il cambio password l'app non parte"
+body = '''
+Ieri ho aggiornato la password del database in /srv/app/app.conf, l'ho
+modificato da root con l'editor. Da allora l'app non parte più.
+La password è giusta, l'ho ricontrollata due volte.
+'''

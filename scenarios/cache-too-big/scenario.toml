@@ -2,5 +2,17 @@ title = "Cache più grande del limite del container"
 category = "memoria"
 difficulty = "media"
 # free mostra la memoria dell'host: il limite vero è nel cgroup del container.
-task = "Dopo l'ultima modifica alla configurazione l'app non parte più per mancanza di memoria, eppure 'free' dice che ce n'è in abbondanza. Trova la causa e riparala."
 man = ["free(1)", "cgroups(7)", "proc(5)"]
+hints = [
+    "free mostra la memoria della macchina, non il limite del container.",
+    "Confronta quanto chiede l'app con il limite del cgroup del container.",
+]
+
+[ticket]
+from = "Andrea (IT)"
+subject = "Memoria insufficiente dopo il tuning"
+body = '''
+Per velocizzare l'app ho alzato un po' la cache nella configurazione. Adesso
+non parte più, dice "memoria insufficiente". Ho controllato con free e di
+memoria libera ce n'è tantissima, quindi la cache non c'entra.
+'''

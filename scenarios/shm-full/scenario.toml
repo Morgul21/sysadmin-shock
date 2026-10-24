@@ -2,5 +2,17 @@ title = "Memoria occupata da un tmpfs"
 category = "memoria"
 difficulty = "difficile"
 # Nessun processo risulta grande: la memoria è nei file di /dev/shm (shmem nel cgroup).
-task = "L'app non parte per mancanza di memoria, ma nessun processo sembra occuparla. Trova la causa e riparala."
 man = ["tmpfs(5)", "df(1)", "cgroups(7)"]
+hints = [
+    "La memoria può essere occupata anche da file, non solo da processi.",
+    "Alcuni filesystem vivono in RAM: controlla quanto spazio occupano.",
+]
+
+[ticket]
+from = "Sara (sviluppo)"
+subject = "Memoria piena ma non si capisce da cosa"
+body = '''
+L'app non parte per "memoria insufficiente". Ho guardato ps e top: nessun
+processo usa più di qualche MB. Ieri sera è anche saltato l'export dei report,
+non so se c'entra.
+'''

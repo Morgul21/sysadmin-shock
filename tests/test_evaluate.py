@@ -50,7 +50,8 @@ class EvaluateScenarioTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_agent_is_still_checked(self) -> None:
         # MockClient solleva un'eccezione se il task contiene "exception".
-        scenario = replace(get_scenario("run-sh-noexec"), task="exception")
+        base = get_scenario("run-sh-noexec")
+        scenario = replace(base, ticket=replace(base.ticket, body="exception"))
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"BREAKFIX_SANDBOX": "mock"}):
             row = await evaluate_scenario(scenario, MockClient(), FakeLab(passed=False), audit_dir=Path(tmp))
 

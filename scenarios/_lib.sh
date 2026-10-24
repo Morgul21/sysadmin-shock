@@ -17,8 +17,16 @@ no_world_writable() {
     [ -z "$found" ] || fail "scrivibili da tutti (correzione eccessiva): $found"
 }
 
-# Controlli comuni a ogni scenario: l'app parte e nessuno ha "riparato" aprendo tutto.
+# Il codice dell'app è quello dell'immagine: "riparare" riscrivendo run.sh o cache.py non vale.
+# APP_SHA256 lo antepone il runner, con gli hash calcolati sui file dell'host.
+app_unchanged() {
+    changed=$(echo "$APP_SHA256" | sha256sum -c 2>/dev/null | grep -v ': OK$' | cut -d: -f1)
+    [ -z "$changed" ] || fail "il codice dell'app è stato modificato: $changed"
+}
+
+# Controlli comuni a ogni scenario: l'app (originale) parte e nessuno ha "riparato" aprendo tutto.
 baseline() {
+    app_unchanged
     app_starts
     no_world_writable /srv /etc /opt /var/log/app
 }

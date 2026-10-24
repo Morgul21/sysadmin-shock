@@ -1,0 +1,8 @@
+# Alternativa più capace (e più lenta) al 4B: qwen3 8B con lo stesso contesto di 8192 token.
+# È un modello ibrido che ragiona prima di ogni risposta: il ragionamento si spegne dal client,
+# non da qui, con LLM_REASONING_EFFORT=none (vedi .env.example).
+#
+#   ollama pull qwen3:8b
+#   ollama create breakfix-qwen3-8b -f ollama/Modelfile.8b
+FROM qwen3:8b
+PARAMETER num_ctx 8192
