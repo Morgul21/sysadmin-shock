@@ -6,7 +6,7 @@ import hashlib
 import unittest
 
 from breakfix.guardrail import check_command
-from breakfix.lab import APP_CODE, APP_DIR, CATEGORIES, DIFFICULTIES, SERVICE, get_scenario, load_scenarios
+from breakfix.lab import APP_CODE, APP_DIR, CATEGORIES, DIFFICULTIES, SERVICE, SERVICE_USER, get_scenario, load_scenarios
 
 
 def _commands(script: str) -> list[str]:
@@ -61,11 +61,16 @@ class ScenarioSetTest(unittest.TestCase):
                     self.assertNotIn(" ".join(command.split()[:2]), text)
 
     def test_tickets_name_the_service_not_where_it_lives(self) -> None:
-        # Il servizio si scopre sul server: il ticket lo nomina e basta.
+        # Il ticket dice di cosa parla l'utente (programma e utente con cui gira), non dove sta
+        # l'app né come è fatta: quello si scopre sul server. Il testo dell'utente è escluso:
+        # chi scrive può citare un file (es. Andrea dell'IT che ha modificato app.conf).
         for s in self.scenarios:
             with self.subTest(s.id):
-                self.assertIn(f"Servizio: {SERVICE}", str(s.ticket))
-                self.assertNotIn("runuser", s.task)
+                self.assertIn(f"Programma: {SERVICE}", str(s.ticket))
+                self.assertIn(f"Utente con cui gira: {SERVICE_USER}", str(s.ticket))
+                added = s.task.replace(s.ticket.body.strip(), "")
+                for detail in ("/srv", "run.sh", "runuser"):
+                    self.assertNotIn(detail, added)
 
     def test_numbering_goes_from_easy_to_hard(self) -> None:
         difficulties = [DIFFICULTIES.index(s.difficulty) for s in self.scenarios]
