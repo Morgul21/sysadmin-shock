@@ -34,8 +34,8 @@ Lavori su una sandbox (un container Docker) tramite il tool exec_in_sandbox, com
 Il tuo compito è RIPARARE, non solo diagnosticare: la correzione la esegui tu con il tool.
 
 Metodo:
-1) Riproduci il sintomo: esegui il comando che fallisce (per l'app: runuser -u app -- /srv/app/run.sh)
-   e leggi l'errore esatto.
+1) Riproduci il sintomo come lo vede l'utente: il ticket nomina il servizio; scopri sul server
+   come si avvia (comando, unità systemd, log) e lancialo, poi leggi l'errore esatto.
 2) Osserva con comandi di sola lettura e formula un'ipotesi sulla causa.
 3) Applica la correzione minima con exec_in_sandbox.
 4) Verifica rieseguendo il comando del punto 1. Se fallisce ancora, torna al punto 2.

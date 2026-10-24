@@ -30,6 +30,9 @@ APP_DIR = sandbox.SANDBOX_DIR / "app"
 APP_CODE = ("run.sh", "cache.py")
 CATEGORIES = ("permessi", "memoria")
 DIFFICULTIES = ("facile", "media", "difficile")
+# Il servizio di cui parlano i ticket: il nome è l'unica cosa che si sa in partenza.
+# Dove sta, come parte e con quale utente lo si scopre sul server (comando, unità systemd).
+SERVICE = "gestionale"
 
 
 @dataclass(frozen=True)
@@ -41,7 +44,7 @@ class Ticket:
     body: str
 
     def __str__(self) -> str:
-        return f"Da: {self.sender}\nOggetto: {self.subject}\n\n{self.body.strip()}"
+        return f"Da: {self.sender}\nServizio: {SERVICE}\nOggetto: {self.subject}\n\n{self.body.strip()}"
 
 
 @dataclass(frozen=True)
@@ -88,6 +91,7 @@ def app_hashes() -> str:
 
 
 def load_scenarios(directory: Path = SCENARIOS_DIR) -> list[Scenario]:
+    """Gli scenari dal più facile al più difficile: è anche la numerazione di `list`."""
     scenarios = []
     for toml_path in sorted(directory.glob("*/scenario.toml")):
         meta = tomllib.loads(toml_path.read_text(encoding="utf-8"))
@@ -105,14 +109,22 @@ def load_scenarios(directory: Path = SCENARIOS_DIR) -> list[Scenario]:
         if scenario.category not in CATEGORIES or scenario.difficulty not in DIFFICULTIES:
             raise ValueError(f"{scenario.id}: categoria o difficoltà non valida")
         scenarios.append(scenario)
-    return scenarios
+    return sorted(scenarios, key=lambda s: (DIFFICULTIES.index(s.difficulty), s.category, s.id))
 
 
 def get_scenario(scenario_id: str) -> Scenario:
-    for scenario in load_scenarios():
+    """Per id o per numero di `list`: chi si esercita usa il numero, che non rivela la causa."""
+    scenarios = load_scenarios()
+    if scenario_id.isdigit() and 1 <= int(scenario_id) <= len(scenarios):
+        return scenarios[int(scenario_id) - 1]
+    for scenario in scenarios:
         if scenario.id == scenario_id:
             return scenario
     raise KeyError(f"scenario sconosciuto: {scenario_id!r} (vedi `breakfix-sandbox list`)")
+
+
+def scenario_number(scenario: Scenario) -> int:
+    return [s.id for s in load_scenarios()].index(scenario.id) + 1
 
 
 @dataclass(frozen=True)
@@ -133,11 +145,16 @@ class DockerLab:
         self.box = DockerSandbox()
 
     def start(self, scenario: Scenario) -> None:
-        """Container nuovo e sano, poi la rottura."""
+        """Container nuovo e sano, la rottura, poi il servizio che prova a partire e fallisce.
+
+        Il tentativo di avvio scrive nel log l'errore vero dello scenario, come su un server
+        dove ci si accorge del problema perché il servizio non riparte.
+        """
         sandbox.reset(scenario.id)
         result = self.box.run_script(scenario.script("break"))
         if result.exit_code != 0:
             raise RuntimeError(f"{scenario.id}: la rottura è fallita: {_output(result)}")
+        self.box.run_script(f"{SERVICE} > /dev/null 2>&1 || true")
 
     def check(self, scenario: Scenario) -> CheckResult:
         if not sandbox.is_running():
@@ -175,22 +192,24 @@ def _output(result: ExecResult) -> str:
 # --- CLI ---------------------------------------------------------------------------
 
 
-def _cmd_list(_: argparse.Namespace) -> None:
-    for s in load_scenarios():
-        print(f"{s.id:<18} {s.category:<9} {s.difficulty:<10} {s.title}")
+def _cmd_list(args: argparse.Namespace) -> None:
+    # Id e titolo dicono la causa: si vedono solo con --spoiler (per chi mantiene gli scenari).
+    for number, s in enumerate(load_scenarios(), start=1):
+        reveal = f"  [{s.id}: {s.title}]" if args.spoiler else ""
+        print(f"{number:>2}  {s.category:<9} {s.difficulty:<10} {s.ticket.subject}{reveal}")
 
 
 def _cmd_start(args: argparse.Namespace) -> None:
     scenario = get_scenario(args.scenario)
     DockerLab().start(scenario)
-    print(f"Scenario {scenario.id} ({scenario.category}, {scenario.difficulty})\n\n{scenario.ticket}\n")
+    print(f"Ticket n. {scenario_number(scenario)} ({scenario.category}, {scenario.difficulty})\n\n{scenario.ticket}\n")
     print("Entra con `breakfix-sandbox shell`, ripara, poi verifica con `breakfix-sandbox check`.")
 
 
 def _cmd_check(_: argparse.Namespace) -> None:
     scenario_id = sandbox.active_scenario()
     if not scenario_id:
-        sys.exit("Nessuno scenario attivo: avviane uno con `breakfix-sandbox start <id>`")
+        sys.exit("Nessuno scenario attivo: avviane uno con `breakfix-sandbox start <numero>`")
     result = DockerLab().check(get_scenario(scenario_id))
     print(result.output)
     sys.exit(0 if result.passed else 1)
@@ -226,9 +245,11 @@ def main() -> None:
     exec_parser = commands.add_parser("exec", help="esegue un comando (senza guardrail)")
     exec_parser.add_argument("command")
     exec_parser.set_defaults(func=_cmd_exec)
-    commands.add_parser("list", help="elenca gli scenari").set_defaults(func=_cmd_list)
+    list_parser = commands.add_parser("list", help="elenca gli scenari (senza svelarne la causa)")
+    list_parser.add_argument("--spoiler", action="store_true", help="mostra anche id e titolo")
+    list_parser.set_defaults(func=_cmd_list)
     start_parser = commands.add_parser("start", help="sandbox nuova + rottura dello scenario")
-    start_parser.add_argument("scenario")
+    start_parser.add_argument("scenario", help="numero di `list` (o id)")
     start_parser.set_defaults(func=_cmd_start)
     commands.add_parser("check", help="pass/fail dello scenario attivo").set_defaults(func=_cmd_check)
     validate_parser = commands.add_parser("validate", help="verifica rottura, check e fix di riferimento")

@@ -54,7 +54,7 @@ Serve Python **3.11–3.13**. Con `uv` si ottiene senza toccare il Python di sis
 py -m pip install --user uv
 py -m uv venv --python 3.12 .venv
 py -m uv pip install --python .venv\Scripts\python.exe -e .
-.venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1   # in cmd: .venv\Scripts\activate.bat
 copy .env.example .env   # di default usa Ollama in locale: nessuna API key
 ```
 
@@ -83,10 +83,10 @@ Remove-Item Env:BREAKFIX_SANDBOX
 breakfix-sandbox up
 breakfix-sandbox validate          # per ogni scenario: sana passa, rotta fallisce, riparata passa
 
-# 4. Esercizio: si sceglie uno scenario, lo si ripara dalla shell, si chiede il verdetto
-breakfix-sandbox list
-breakfix-sandbox start srv-no-traverse   # sandbox nuova + rottura; stampa il ticket
-breakfix-sandbox shell                   # shell di root nella sandbox (exit per uscire)
+# 4. Esercizio: si sceglie un ticket, lo si ripara dalla shell, si chiede il verdetto
+breakfix-sandbox list                    # numero, categoria, difficoltà, oggetto (niente spoiler)
+breakfix-sandbox start 2                 # sandbox nuova + rottura; stampa il ticket
+breakfix-sandbox shell                   # shell di root sul server (exit per uscire)
 breakfix-sandbox check                   # PASS/FAIL dello scenario attivo
 
 # 5. Il riferimento: il fixer su tutti gli scenari (o su alcuni), con passi e token
@@ -115,6 +115,16 @@ Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>
 | `BREAKFIX_AUDIT_DIR` | `.breakfix/audit` | dove salvare l'audit trail |
 
 ## Scenari
+
+> **Spoiler.** Se vuoi esercitarti, fermati qui: questa sezione descrive l'app, le cause e le
+> soluzioni. Per esercitarti ti bastano `breakfix-sandbox list` e il ticket che stampa `start`.
+
+**Si parte sapendo solo quello che saprebbe un sistemista.** Il ticket nomina il servizio
+(`gestionale`), non dove sta né come parte. Sul server lo si scopre come su un server vero:
+il comando `gestionale` che usano gli utenti (`which`, poi `cat`), l'unità systemd in
+`/etc/systemd/system/`, e il log, dove il primo avvio fallito dopo la rottura ha scritto
+l'errore vero dello scenario. Il fixer riceve lo stesso ticket e nient'altro: né il suo prompt
+né le istruzioni del server MCP dicono dov'è l'app o con quale utente gira.
 
 L'app nella sandbox ([sandbox/app/](sandbox/app/)) è minima ma ha i pezzi tipici: `run.sh` legge
 `app.conf` (con una password), scrive lo stato in `data/` e il log in `/var/log/app/`, poi
