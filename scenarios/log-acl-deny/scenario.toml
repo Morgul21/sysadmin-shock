@@ -1,0 +1,6 @@
+title = "ACL che nega la scrittura del log"
+category = "permessi"
+difficulty = "difficile"
+# ls -l mostra il log scrivibile dal gruppo app: la causa si vede solo con getfacl.
+task = "L'app non parte, ma i permessi del log sembrano corretti. Trova la causa e riparala."
+man = ["acl(5)", "getfacl(1)", "setfacl(1)"]

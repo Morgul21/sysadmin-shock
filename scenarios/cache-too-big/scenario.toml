@@ -1,0 +1,6 @@
+title = "Cache più grande del limite del container"
+category = "memoria"
+difficulty = "media"
+# free mostra la memoria dell'host: il limite vero è nel cgroup del container.
+task = "Dopo l'ultima modifica alla configurazione l'app non parte più per mancanza di memoria, eppure 'free' dice che ce n'è in abbondanza. Trova la causa e riparala."
+man = ["free(1)", "cgroups(7)", "proc(5)"]

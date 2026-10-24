@@ -36,12 +36,15 @@ riferimento il check non passa, oppure se il container non è più sano.
 | Server MCP (FastMCP, 1 tool) | [src/breakfix/server.py](src/breakfix/server.py) |
 | Guardrail sui comandi del tool | [src/breakfix/guardrail.py](src/breakfix/guardrail.py) |
 | Audit trail da ContextTracing | [src/breakfix/audit.py](src/breakfix/audit.py) |
-| Backend sandbox Docker / mock + CLI | [src/breakfix/sandbox.py](src/breakfix/sandbox.py) |
-| Immagine della sandbox (+ log con prompt injection) | [sandbox/Dockerfile](sandbox/Dockerfile), [sandbox/app.log](sandbox/app.log) |
+| Backend sandbox Docker / mock | [src/breakfix/sandbox.py](src/breakfix/sandbox.py) |
+| Scenari + CLI `breakfix-sandbox` (start, check, validate) | [src/breakfix/lab.py](src/breakfix/lab.py), [scenarios/](scenarios/) |
+| Eval del fixer sugli scenari | [src/breakfix/evaluate.py](src/breakfix/evaluate.py) |
+| Immagine della sandbox: l'app da rompere (+ log con prompt injection) | [sandbox/Dockerfile](sandbox/Dockerfile), [sandbox/app/](sandbox/app/), [sandbox/app.log](sandbox/app.log) |
 | Agente fixer di riferimento (multi-provider, memory persistente) | [src/breakfix/agent.py](src/breakfix/agent.py) |
 | Test contratto MCP + integrazione datapizza | [tests/test_server.py](tests/test_server.py) |
 | Test guardrail (bloccati / fix legittimi) | [tests/test_guardrail.py](tests/test_guardrail.py) |
 | Test end-to-end injection → blocco → audit (senza API key) | [tests/test_agent_trace.py](tests/test_agent_trace.py) |
+| Test struttura scenari + runner degli eval (senza Docker) | [tests/test_scenarios.py](tests/test_scenarios.py), [tests/test_evaluate.py](tests/test_evaluate.py) |
 
 ## Installazione
 
@@ -75,19 +78,26 @@ python -m unittest discover -s tests -v
 # 2. Verifica il collegamento agente -> MCP senza chiamare il modello
 $env:BREAKFIX_SANDBOX = "mock"; breakfix-agent --list-tools
 
-# 3. Sandbox vera (Docker Desktop avviato; la prima volta builda l'immagine)
+# 3. Sandbox vera (Docker Desktop avviato): builda l'immagine e verifica gli scenari
 Remove-Item Env:BREAKFIX_SANDBOX
 breakfix-sandbox up
-breakfix-sandbox exec "chmod 644 /srv/app/run.sh"   # rottura manuale, finché non ci sono gli scenari
+breakfix-sandbox validate          # per ogni scenario: sana passa, rotta fallisce, riparata passa
 
-# 4a. Riparazione manuale da parte dell'utente: shell di root nella sandbox (exit per uscire)
-breakfix-sandbox shell
+# 4. Esercizio: si sceglie uno scenario, lo si ripara dalla shell, si chiede il verdetto
+breakfix-sandbox list
+breakfix-sandbox start srv-no-traverse   # sandbox nuova + rottura; stampa il sintomo
+breakfix-sandbox shell                   # shell di root nella sandbox (exit per uscire)
+breakfix-sandbox check                   # PASS/FAIL dello scenario attivo
 
-# 4b. ...oppure si osserva come lo risolve il fixer di riferimento
-breakfix-agent "L'utente app non riesce ad avviare /srv/app/run.sh. Trova la causa e riparala."
+# 5. Il riferimento: il fixer su tutti gli scenari (o su alcuni), con passi e token
+breakfix-eval
+breakfix-eval run-sh-noexec memory-hog
 
 breakfix-sandbox down
 ```
+
+`breakfix-eval` scrive il report in `.breakfix/eval/<data>.json` ed esce con 1 se uno scenario
+non è stato riparato. Ogni scenario parte da un container nuovo e da una memory vuota.
 
 La memory dell'agente è in `.breakfix/memory.json` (`breakfix-agent --reset-memory` per azzerarla).
 Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>-<trace>.json`.
@@ -103,6 +113,35 @@ Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>
 | `LLM_TEMPERATURE` | non inviata | da impostare solo per modelli che la supportano |
 | `BREAKFIX_SANDBOX` | `docker` | `mock` per test/demo senza Docker |
 | `BREAKFIX_AUDIT_DIR` | `.breakfix/audit` | dove salvare l'audit trail |
+
+## Scenari
+
+L'app nella sandbox ([sandbox/app/](sandbox/app/)) è minima ma ha i pezzi tipici: `run.sh` legge
+`app.conf` (con una password), scrive lo stato in `data/` e il log in `/var/log/app/`, poi
+`cache.py` alloca la cache in memoria. Ogni scenario ne rompe uno; il check è sempre lo stesso
+criterio (l'app riparte come utente `app`) più i controlli contro le correzioni eccessive.
+
+| Scenario | Categoria | Difficoltà | Cosa si impara |
+|---|---|---|---|
+| `run-sh-noexec` | permessi | facile | bit di esecuzione |
+| `conf-root-owned` | permessi | facile | proprietario/gruppo; `chmod 644` fallisce il check (password) |
+| `srv-no-traverse` | permessi | media | stesso sintomo del primo, ma manca la `x` su `/srv` (`namei -l`) |
+| `stale-root-file` | permessi | media | file di stato lasciato da un avvio come root |
+| `log-acl-deny` | permessi | difficile | `ls -l` dice scrivibile, una ACL dice di no (`getfacl`) |
+| `memory-hog` | memoria | media | trovare e fermare il processo giusto, non il container |
+| `cache-too-big` | memoria | media | `free` mostra l'host, il limite vero è nel cgroup |
+| `shm-full` | memoria | difficile | memoria che nessun processo possiede: file in `/dev/shm` |
+
+Uno scenario è una cartella `scenarios/<id>/` con:
+- `scenario.toml`: titolo, categoria, difficoltà, il sintomo (`task`) e le man page utili (per il tutor);
+- `break.sh`, `check.sh` e `fix.sh`, eseguiti come root nel container.
+
+I check includono [scenarios/_lib.sh](scenarios/_lib.sh) (`baseline`: l'app parte, niente file scrivibili
+da tutti) e girano con `set -e`: un errore inatteso è un FAIL, mai un PASS. Gli script arrivano dall'host
+su stdin, quindi chi si esercita da root nella sandbox non può modificare il proprio verdetto.
+Un fix diverso da quello di riferimento va bene se è minimo: per `stale-root-file`, ad esempio,
+anche cancellare il file passa il check. Un test verifica che ogni `fix.sh` passi il guardrail:
+altrimenti nessun agente potrebbe risolvere lo scenario.
 
 ## Sicurezza
 
@@ -143,7 +182,7 @@ attuale: `--reset-memory`.
 - [x] **S12** Architettura + server MCP con un tool collegato all'agente
 - [x] Ruoli invertiti: chi impara ripara (`breakfix-sandbox shell`), il fixer diventa il riferimento
 - [x] **S13** Guardrail su `exec_in_sandbox` (denylist, niente `chmod 777`) + ContextTracing come audit trail; prompt injection di prova piantata nel log della sandbox
-- [ ] **S14** 5–8 scenari (permessi + memoria) con rottura, check e fix di riferimento = eval set pass/fail; timeout già presente
+- [x] **S14** 8 scenari (5 permessi + 3 memoria) con rottura, check e fix di riferimento, validati su Docker; `breakfix-eval` per il fixer (pass/fail, passi, token)
 - [ ] **S14–S15** Tutor: indizi graduali con citazioni delle man page + guardrail di output "niente spoiler" (blocca le risposte che contengono il fix di riferimento)
 - [ ] **S15** Dockerfile dell'app + README finale
 - [ ] Extra: DagPipeline Author→Breaker→Validator dalle man page, tutor usato da Claude Desktop, eval in CI
@@ -159,4 +198,12 @@ attuale: `--reset-memory`.
   senza avvisare: per questo [ollama/Modelfile](ollama/Modelfile) lo porta a 8192.
 - Sulla sandbox mock il modello locale ha scritto "correzione applicata: chmod +x" senza aver
   eseguito il comando. È il motivo per cui il verdetto lo dà lo script di check, non la risposta dell'agente.
+- Su Windows `subprocess` in modalità testo converte `
+` in `
+` anche sullo **stdin**: gli script
+  degli scenari arrivavano nel container con `` nei nomi dei file. Si passano in byte, e
+  [.gitattributes](.gitattributes) forza LF su tutto quello che finisce nel container.
+- Gli scenari di memoria non si appoggiano all'OOM killer: sceglie il processo più grande, quindi
+  avrebbe ucciso il processo "colpevole" e lo scenario si sarebbe riparato da solo. `cache.py` controlla
+  prima la memoria libera nel cgroup (`anon` + `shmem` contro `memory.max`) e fallisce in modo deterministico.
 - `ClientFactory` invia `temperature=0.7` di default e `gpt-5.6-luna` risponde 400: la temperatura va passata esplicitamente (`None` = non inviata).

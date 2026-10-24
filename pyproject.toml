@@ -27,7 +27,8 @@ google = ["datapizza-ai-clients-google"]
 [project.scripts]
 breakfix-server = "breakfix.server:main"
 breakfix-agent = "breakfix.agent:main"
-breakfix-sandbox = "breakfix.sandbox:main"
+breakfix-sandbox = "breakfix.lab:main"
+breakfix-eval = "breakfix.evaluate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

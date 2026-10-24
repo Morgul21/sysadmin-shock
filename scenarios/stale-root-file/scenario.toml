@@ -1,0 +1,5 @@
+title = "Avvio manuale da root"
+category = "permessi"
+difficulty = "media"
+task = "Stanotte qualcuno ha avviato l'app a mano per un test; da allora l'utente app non riesce più ad avviarla. Trova la causa e riparala."
+man = ["chown(1)", "ls(1)", "find(1)"]
