@@ -6,10 +6,8 @@ Il server MCP non sa se sta parlando con Docker o con un mock: vede solo un
 
 from __future__ import annotations
 
-import argparse
 import os
 import subprocess
-import sys
 from pathlib import Path
 from typing import Protocol
 
@@ -22,6 +20,8 @@ SANDBOX_DIR = Path(__file__).resolve().parents[2] / "sandbox"
 
 EXEC_TIMEOUT_SECONDS = 15
 MAX_OUTPUT_CHARS = 4000
+# Etichetta del container con lo scenario attivo: il reset la azzera insieme al container.
+SCENARIO_LABEL = "breakfix.scenario"
 
 # Limiti del container: niente rete, memoria e processi limitati, niente escalation.
 RUN_FLAGS = [
@@ -31,6 +31,8 @@ RUN_FLAGS = [
     "--pids-limit", "128",
     "--security-opt", "no-new-privileges",
     "--hostname", "sandbox",
+    # /dev/shm più grande del default (64MB): lo scenario shm-full lo riempie.
+    "--shm-size", "224m",
 ]
 
 
@@ -59,24 +61,30 @@ class DockerSandbox:
         self.timeout = timeout
 
     def exec(self, command: str) -> ExecResult:
+        return self._run(["sh", "-c", command], None, self.timeout)
+
+    def run_script(self, script: str, timeout: int = 60) -> ExecResult:
+        """Esegue uno script dell'host (rottura, check, fix) passandolo su stdin a `sh -s`."""
+        return self._run(["sh", "-s"], script, timeout)
+
+    def _run(self, argv: list[str], stdin: str | None, timeout: int) -> ExecResult:
         try:
+            # In byte, non in testo: su Windows il text mode trasformerebbe LF in CRLF sullo stdin.
             proc = subprocess.run(
-                ["docker", "exec", self.container, "sh", "-c", command],
+                ["docker", "exec", *(["-i"] if stdin is not None else []), self.container, *argv],
+                input=stdin.encode("utf-8") if stdin is not None else None,
                 capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=self.timeout,
+                timeout=timeout,
             )
         except subprocess.TimeoutExpired:
             return ExecResult(
                 exit_code=124,
                 stdout="",
-                stderr=f"timeout: comando interrotto dopo {self.timeout}s",
+                stderr=f"timeout: comando interrotto dopo {timeout}s",
                 truncated=False,
             )
-        stdout, cut_out = _clip(proc.stdout)
-        stderr, cut_err = _clip(proc.stderr)
+        stdout, cut_out = _clip(proc.stdout.decode("utf-8", errors="replace"))
+        stderr, cut_err = _clip(proc.stderr.decode("utf-8", errors="replace"))
         return ExecResult(exit_code=proc.returncode, stdout=stdout, stderr=stderr, truncated=cut_out or cut_err)
 
 
@@ -112,49 +120,48 @@ def get_sandbox() -> Sandbox:
     raise ValueError(f"BREAKFIX_SANDBOX non valido: {kind!r} (usa docker o mock)")
 
 
-# --- CLI per gestire il container ----------------------------------------------
+# --- Gestione del container (la CLI è in lab.py) ----------------------------------
 
 
-def _docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["docker", *args], text=True, check=check)
+def _docker(*args: str, check: bool = True, quiet: bool = False) -> subprocess.CompletedProcess[str]:
+    # quiet: niente stdout (es. l'id del container), ma gli errori restano visibili.
+    return subprocess.run(["docker", *args], text=True, check=check, stdout=subprocess.DEVNULL if quiet else None)
 
 
 def up() -> None:
     _docker("build", "-t", IMAGE_NAME, str(SANDBOX_DIR))
-    _docker("rm", "-f", CONTAINER_NAME, check=False)
-    _docker("run", "-d", "--name", CONTAINER_NAME, *RUN_FLAGS, IMAGE_NAME)
+    reset()
     print(f"Sandbox pronta: {CONTAINER_NAME}")
+
+
+def reset(scenario: str = "") -> None:
+    """Ricrea il container dall'immagine: ogni scenario parte da una sandbox sana."""
+    _docker("rm", "-f", CONTAINER_NAME, check=False, quiet=True)
+    _docker("run", "-d", "--name", CONTAINER_NAME, "--label", f"{SCENARIO_LABEL}={scenario}",
+            *RUN_FLAGS, IMAGE_NAME, quiet=True)
 
 
 def down() -> None:
     _docker("rm", "-f", CONTAINER_NAME, check=False)
 
 
+def is_running() -> bool:
+    proc = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", CONTAINER_NAME],
+                          capture_output=True, text=True)
+    return proc.stdout.strip() == "true"
+
+
+def active_scenario() -> str | None:
+    proc = subprocess.run(
+        ["docker", "inspect", "-f", f'{{{{index .Config.Labels "{SCENARIO_LABEL}"}}}}', CONTAINER_NAME],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
 def shell() -> None:
     """Shell interattiva nella sandbox: è da qui che chi si esercita diagnostica e ripara."""
     result = _docker("exec", "-it", "--workdir", "/root", CONTAINER_NAME, "bash", "-l", check=False)
-    sys.exit(result.returncode)
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(prog="breakfix-sandbox", description="Gestisce il container sandbox")
-    parser.add_argument("action", choices=["up", "down", "shell", "exec"])
-    parser.add_argument("command", nargs="?", help="Comando da eseguire con 'exec'")
-    args = parser.parse_args()
-
-    if args.action == "up":
-        up()
-    elif args.action == "down":
-        down()
-    elif args.action == "shell":
-        shell()
-    else:
-        if not args.command:
-            parser.error("'exec' richiede un comando")
-        result = get_sandbox().exec(args.command)
-        print(result.model_dump_json(indent=2))
-        sys.exit(0 if result.exit_code == 0 else 1)
-
-
-if __name__ == "__main__":
-    main()
+    raise SystemExit(result.returncode)

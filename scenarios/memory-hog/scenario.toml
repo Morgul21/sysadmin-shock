@@ -1,0 +1,5 @@
+title = "Processo che occupa la memoria"
+category = "memoria"
+difficulty = "media"
+task = "L'app non parte: dice che non c'è abbastanza memoria. Trova la causa e riparala senza fermare il container."
+man = ["ps(1)", "kill(1)", "proc(5)"]

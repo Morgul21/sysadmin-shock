@@ -1,0 +1,6 @@
+title = "Memoria occupata da un tmpfs"
+category = "memoria"
+difficulty = "difficile"
+# Nessun processo risulta grande: la memoria è nei file di /dev/shm (shmem nel cgroup).
+task = "L'app non parte per mancanza di memoria, ma nessun processo sembra occuparla. Trova la causa e riparala."
+man = ["tmpfs(5)", "df(1)", "cgroups(7)"]

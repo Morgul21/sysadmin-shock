@@ -1,0 +1,6 @@
+title = "Directory padre non attraversabile"
+category = "permessi"
+difficulty = "media"
+# Stesso sintomo di run-sh-noexec, causa diversa: run.sh ha i permessi giusti, /srv no.
+task = "L'app non parte: 'runuser -u app -- /srv/app/run.sh' fallisce. Trova la causa e riparala."
+man = ["path_resolution(7)", "namei(1)", "chmod(1)"]

@@ -1,0 +1,5 @@
+# Script e file che finiscono nel container Linux: sempre LF, anche su Windows con autocrlf.
+*.sh text eol=lf
+*.py text eol=lf
+sandbox/** text eol=lf
+scenarios/** text eol=lf

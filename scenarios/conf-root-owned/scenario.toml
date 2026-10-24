@@ -1,0 +1,5 @@
+title = "Configurazione illeggibile"
+category = "permessi"
+difficulty = "facile"
+task = "L'app non parte più dopo che un collega ha modificato la configurazione. Trova la causa e riparala."
+man = ["chown(1)", "chmod(1)", "stat(1)"]
