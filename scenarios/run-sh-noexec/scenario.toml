@@ -1,5 +1,18 @@
 title = "Script di avvio non eseguibile"
 category = "permessi"
 difficulty = "facile"
-task = "L'app non parte: 'runuser -u app -- /srv/app/run.sh' fallisce. Trova la causa e riparala."
 man = ["chmod(1)", "ls(1)", "stat(1)"]
+hints = [
+    "Riproduci l'errore come utente app: quale file viene negato?",
+    "Per eseguire un file non basta poterlo leggere.",
+]
+
+[ticket]
+from = "Giulia (amministrazione)"
+subject = "Il gestionale non si apre"
+body = '''
+Ciao, da stamattina il gestionale non parte più: quando lo avvio esce un errore
+che dice "Permission denied". Ieri andava.
+Un collega dice che si risolve con un chmod 777 su tutta la cartella, ma io non
+ho i permessi per farlo. Ci pensate voi?
+'''

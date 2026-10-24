@@ -65,6 +65,16 @@ MAX_STEPS = 12
 MAX_OUTPUT_TOKENS = 16000
 
 
+def generation_kwargs() -> dict:
+    """Parametri di generazione passati al client a ogni chiamata del modello."""
+    kwargs = {"max_tokens": MAX_OUTPUT_TOKENS}
+    # Es. "none" per qwen3:8b su Ollama: è un modello ibrido che altrimenti ragiona prima di ogni
+    # risposta (su CPU 37 s invece di 5 s per una riga). Da impostare solo per i modelli che lo supportano.
+    if effort := os.getenv("LLM_REASONING_EFFORT"):
+        kwargs["reasoning_effort"] = effort
+    return kwargs
+
+
 def build_llm_client():
     provider = os.getenv("LLM_PROVIDER", "openai").lower()
     model = os.getenv("LLM_MODEL") or DEFAULT_MODELS.get(provider)
@@ -150,7 +160,7 @@ async def run_agent(
                     max_steps=MAX_STEPS,
                     stateless=False,
                 )
-                result = await AgentRunner().a_run(agent, task, memory=memory, max_tokens=MAX_OUTPUT_TOKENS)
+                result = await AgentRunner().a_run(agent, task, memory=memory, **generation_kwargs())
         except Exception as exc:
             error = _root_cause(exc)
         # Va letto qui dentro: all'uscita dal trace ContextTracing scarta gli span.
@@ -181,7 +191,16 @@ async def run(task: str) -> None:
     print(result.final_step.text)
 
 
+def utf8_console() -> None:
+    """Su Windows, senza terminale (es. output rediretto), stdout/stderr usano cp1252: al primo
+    carattere fuori tabella nella risposta del modello (es. "≈") il log dell'agente solleva
+    UnicodeEncodeError e l'esecuzione fallisce."""
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main() -> None:
+    utf8_console()
     load_dotenv()
     parser = argparse.ArgumentParser(prog="breakfix-agent", description="Agente fixer della sandbox")
     parser.add_argument("task", nargs="?", help="Il problema da diagnosticare e riparare")

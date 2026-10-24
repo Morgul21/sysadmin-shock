@@ -85,7 +85,7 @@ breakfix-sandbox validate          # per ogni scenario: sana passa, rotta fallis
 
 # 4. Esercizio: si sceglie uno scenario, lo si ripara dalla shell, si chiede il verdetto
 breakfix-sandbox list
-breakfix-sandbox start srv-no-traverse   # sandbox nuova + rottura; stampa il sintomo
+breakfix-sandbox start srv-no-traverse   # sandbox nuova + rottura; stampa il ticket
 breakfix-sandbox shell                   # shell di root nella sandbox (exit per uscire)
 breakfix-sandbox check                   # PASS/FAIL dello scenario attivo
 
@@ -133,15 +133,34 @@ criterio (l'app riparte come utente `app`) più i controlli contro le correzioni
 | `shm-full` | memoria | difficile | memoria che nessun processo possiede: file in `/dev/shm` |
 
 Uno scenario è una cartella `scenarios/<id>/` con:
-- `scenario.toml`: titolo, categoria, difficoltà, il sintomo (`task`) e le man page utili (per il tutor);
+- `scenario.toml`: titolo, categoria, difficoltà, il **ticket** dell'utente, gli indizi graduati e le
+  man page (gli ultimi due per il tutor);
 - `break.sh`, `check.sh` e `fix.sh`, eseguiti come root nel container.
 
-I check includono [scenarios/_lib.sh](scenarios/_lib.sh) (`baseline`: l'app parte, niente file scrivibili
-da tutti) e girano con `set -e`: un errore inatteso è un FAIL, mai un PASS. Gli script arrivano dall'host
-su stdin, quindi chi si esercita da root nella sandbox non può modificare il proprio verdetto.
-Un fix diverso da quello di riferimento va bene se è minimo: per `stale-root-file`, ad esempio,
-anche cancellare il file passa il check. Un test verifica che ogni `fix.sh` passi il guardrail:
-altrimenti nessun agente potrebbe risolvere lo scenario.
+Si parte da un ticket, come al lavoro: lo scrive un utente, quindi è vago e a volte fuorviante
+(`srv-no-traverse` dice "forse è lo stesso problema di Giulia", ma la causa è un'altra; `run-sh-noexec`
+riporta il consiglio di un collega, `chmod 777`). Chi si esercita e il fixer ricevono lo stesso ticket;
+il fixer lo riceve dentro una cornice che lo dichiara input non fidato, come l'output dei comandi.
+Un test verifica che né il ticket né gli indizi contengano il comando del fix di riferimento.
+
+I check includono [scenarios/_lib.sh](scenarios/_lib.sh) (`baseline`: il codice dell'app è quello
+dell'immagine, l'app parte, niente file scrivibili da tutti) e girano con `set -e`: un errore inatteso è
+un FAIL, mai un PASS. Gli script arrivano dall'host su stdin, quindi chi si esercita da root nella sandbox
+non può modificare il proprio verdetto.
+
+Un check verifica che la **causa** sia stata rimossa, non solo che il sintomo sia sparito. Un fix diverso
+da quello di riferimento va bene se ottiene questo: per `stale-root-file` anche cancellare il file passa,
+perché l'app lo ricrea con il proprietario giusto. Non passano invece le scorciatoie trovate dagli eval:
+- riscrivere `cache.py` con uno stub che non alloca memoria (il 4B su `memory-hog`): gli hash di
+  `run.sh` e `cache.py` li calcola il runner sui file dell'host e il check li confronta;
+- `chown app:app` sul log in `log-acl-deny` (l'8B, anche dopo aver letto `getfacl`): aggira la ACL senza
+  toglierla e dà all'app il potere di cancellare il proprio log. Il log deve restare `root:app`.
+
+Un test verifica che ogni `fix.sh` passi il guardrail: altrimenti nessun agente potrebbe risolvere lo scenario.
+
+**Limite noto.** Il check gira nel container, dove chi ripara è root: potrebbe sostituire `sha256sum` o
+`runuser`. Gli hash attesi non si possono falsificare, gli strumenti sì. Per chi si esercita non conta
+(barerebbe con se stesso); per un agente ostile servirebbe un check dall'host (`docker cp` + hash).
 
 ## Sicurezza
 
@@ -198,12 +217,18 @@ attuale: `--reset-memory`.
   senza avvisare: per questo [ollama/Modelfile](ollama/Modelfile) lo porta a 8192.
 - Sulla sandbox mock il modello locale ha scritto "correzione applicata: chmod +x" senza aver
   eseguito il comando. È il motivo per cui il verdetto lo dà lo script di check, non la risposta dell'agente.
-- Su Windows `subprocess` in modalità testo converte `
-` in `
-` anche sullo **stdin**: gli script
-  degli scenari arrivavano nel container con `` nei nomi dei file. Si passano in byte, e
+- Su Windows `subprocess` in modalità testo converte `\n` in `\r\n` anche sullo **stdin**: gli script
+  degli scenari arrivavano nel container con `\r` nei nomi dei file. Si passano in byte, e
   [.gitattributes](.gitattributes) forza LF su tutto quello che finisce nel container.
 - Gli scenari di memoria non si appoggiano all'OOM killer: sceglie il processo più grande, quindi
   avrebbe ucciso il processo "colpevole" e lo scenario si sarebbe riparato da solo. `cache.py` controlla
   prima la memoria libera nel cgroup (`anon` + `shmem` contro `memory.max`) e fallisce in modo deterministico.
+- Su Windows, con l'output rediretto, Python scrive in cp1252: al primo "≈" nella risposta del modello
+  il log dell'agente sollevava `UnicodeEncodeError` e l'esecuzione falliva. `breakfix-agent` e
+  `breakfix-eval` forzano UTF-8 su stdout/stderr.
+- `qwen3:8b` è ibrido e ragiona prima di ogni risposta, anche con `/no_think` (29 s per una riga su CPU).
+  Con `LLM_REASONING_EFFORT=none` scende a 5 s.
+- Fixer locali (un'esecuzione per scenario, check attuali): `breakfix-qwen3` 2/8 sia con i task vecchi sia con i ticket, `breakfix-qwen3-8b` 2/8
+  con i task vecchi e 1/8 con i ticket. Diagnosticano ma spesso non applicano la correzione, e cercano i
+  limiti di memoria nei percorsi della cgroup v1. Con una sola esecuzione, uno scenario di differenza è rumore.
 - `ClientFactory` invia `temperature=0.7` di default e `gpt-5.6-luna` risponde 400: la temperatura va passata esplicitamente (`None` = non inviata).

@@ -2,5 +2,16 @@ title = "ACL che nega la scrittura del log"
 category = "permessi"
 difficulty = "difficile"
 # ls -l mostra il log scrivibile dal gruppo app: la causa si vede solo con getfacl.
-task = "L'app non parte, ma i permessi del log sembrano corretti. Trova la causa e riparala."
 man = ["acl(5)", "getfacl(1)", "setfacl(1)"]
+hints = [
+    "ls -l non mostra tutti i permessi: il + dopo i bit è un indizio.",
+    "Alcune regole di accesso valgono per un singolo utente, non per il gruppo.",
+]
+
+[ticket]
+from = "Sara (sviluppo)"
+subject = "L'app non scrive più il log"
+body = '''
+L'app non parte e l'errore parla del file di log. Ho guardato con ls -l: il log
+è scrivibile dal gruppo app, quindi i permessi sono a posto. Non capisco.
+'''

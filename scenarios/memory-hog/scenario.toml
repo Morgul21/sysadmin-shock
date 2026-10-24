@@ -1,5 +1,16 @@
 title = "Processo che occupa la memoria"
 category = "memoria"
 difficulty = "media"
-task = "L'app non parte: dice che non c'è abbastanza memoria. Trova la causa e riparala senza fermare il container."
 man = ["ps(1)", "kill(1)", "proc(5)"]
+hints = [
+    "Il container ha un limite di memoria suo: chi la sta usando?",
+    "Ordina i processi per memoria residente; non fermare il container.",
+]
+
+[ticket]
+from = "Giulia (amministrazione)"
+subject = "Errore di memoria"
+body = '''
+Il gestionale non parte, dice "memoria insufficiente". Ma il server è nuovo,
+avrà un sacco di memoria! Non è che si è riempito qualcosa?
+'''
