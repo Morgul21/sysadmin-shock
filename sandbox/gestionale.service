@@ -1,0 +1,14 @@
+[Unit]
+Description=Gestionale aziendale
+After=network.target
+
+[Service]
+Type=oneshot
+User=app
+Group=app
+ExecStart=/srv/app/run.sh
+StandardOutput=append:/var/log/app/app.log
+StandardError=append:/var/log/app/app.log
+
+[Install]
+WantedBy=multi-user.target

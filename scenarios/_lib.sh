@@ -8,7 +8,8 @@ pass() { echo "PASS: $*"; exit 0; }
 
 # Il criterio di tutti gli scenari: l'app riparte come utente app.
 app_starts() {
-    out=$(runuser -u app -- /srv/app/run.sh 2>&1) || fail "l'app non parte come utente app: $out"
+    # Non `gestionale`: è un file del server e chi ripara potrebbe cambiarlo (es. farlo girare da root).
+    out=$(runuser -u app -- /srv/app/run.sh 2>&1) || fail "il gestionale non parte: $out"
 }
 
 # Correzione eccessiva: file o directory scrivibili da tutti (senza sticky bit).

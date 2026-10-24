@@ -1,0 +1,10 @@
+#!/bin/sh
+# Avvia il gestionale con l'utente di servizio, come fa il servizio (vedi gestionale.service).
+# Se l'avvio fallisce, l'errore finisce anche nel log del servizio.
+out=$(runuser -u app -- /srv/app/run.sh 2>&1)
+rc=$?
+[ -n "$out" ] && printf '%s\n' "$out"
+if [ "$rc" -ne 0 ]; then
+    printf '%s\n' "$out" | sed "s/^/$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR gestionale: /" >> /var/log/app/app.log
+fi
+exit "$rc"

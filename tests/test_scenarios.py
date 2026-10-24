@@ -6,7 +6,7 @@ import hashlib
 import unittest
 
 from breakfix.guardrail import check_command
-from breakfix.lab import APP_CODE, APP_DIR, CATEGORIES, load_scenarios
+from breakfix.lab import APP_CODE, APP_DIR, CATEGORIES, DIFFICULTIES, SERVICE, get_scenario, load_scenarios
 
 
 def _commands(script: str) -> list[str]:
@@ -59,6 +59,21 @@ class ScenarioSetTest(unittest.TestCase):
             for command in _commands(s.script("fix")):
                 with self.subTest(s.id, command=command):
                     self.assertNotIn(" ".join(command.split()[:2]), text)
+
+    def test_tickets_name_the_service_not_where_it_lives(self) -> None:
+        # Il servizio si scopre sul server: il ticket lo nomina e basta.
+        for s in self.scenarios:
+            with self.subTest(s.id):
+                self.assertIn(f"Servizio: {SERVICE}", str(s.ticket))
+                self.assertNotIn("runuser", s.task)
+
+    def test_numbering_goes_from_easy_to_hard(self) -> None:
+        difficulties = [DIFFICULTIES.index(s.difficulty) for s in self.scenarios]
+        self.assertEqual(difficulties, sorted(difficulties))
+        self.assertEqual(get_scenario("1").id, self.scenarios[0].id)
+        self.assertEqual(get_scenario(self.scenarios[-1].id), self.scenarios[-1])
+        with self.assertRaises(KeyError):
+            get_scenario(str(len(self.scenarios) + 1))
 
 
 if __name__ == "__main__":
