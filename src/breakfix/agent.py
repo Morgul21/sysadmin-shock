@@ -55,8 +55,6 @@ def build_llm_client():
     model = os.getenv("LLM_MODEL") or DEFAULT_MODELS.get(provider)
     if not model:
         sys.exit(f"Imposta LLM_MODEL per il provider {provider!r}")
-    # ClientFactory usa 0.7 di default, ma i modelli di reasoning (es. gpt-5.6-luna) rifiutano
-    # il parametro: None fa sì che il client non lo invii.
     temperature = os.getenv("LLM_TEMPERATURE")
     temperature = float(temperature) if temperature else None
     if provider == "ollama":

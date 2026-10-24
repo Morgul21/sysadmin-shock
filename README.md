@@ -1,12 +1,12 @@
-# Break & Fix Lab
+# Sysadmin Shock
 
 Una palestra per imparare il troubleshooting Linux **da soli**: uno scenario rompe apposta
-una sandbox Docker isolata (permessi e memoria), **tu** entri con una shell e la ripari,
-uno script di check dice **pass/fail**. Gli agenti non riparano al posto tuo:
+una sandbox Docker isolata (permessi e memoria), **l'utente** ci entra con una shell e la ripara,
+uno script di check dice **pass/fail**. Gli agenti non riparano al posto dell'utente:
 
-- il **tutor** ti dà indizi graduali, con riferimenti alle man page, ma senza mai darti il comando di fix;
-- il **fixer** risolve ogni scenario per conto suo: dimostra che si può risolvere ed è il
-  riferimento con cui confrontarti (passi, costo). È anche la base dell'eval di traiettoria.
+- il **tutor** dà indizi graduali, con riferimenti alle man page, ma senza mai fornire il comando di fix;
+- il **fixer** risolve ogni scenario in autonomia: dimostra che si può risolvere ed è il
+  riferimento con cui l'utente può confrontarsi (passi, costo). È anche la base dell'eval di traiettoria.
 
 ## Architettura
 
@@ -20,7 +20,7 @@ che un solo agente con un tool gestisce bene, e si misurano con eval determinist
   man page ─► Author ─► Breaker ─► Validator ─► scenario (rottura + check + fix di riferimento)
                                                     │
                                                     ▼
-  tu ── breakfix-sandbox shell ──────────────► sandbox Docker (no rete, 256MB, 128 pid)
+  utente ── breakfix-sandbox shell ──────────► sandbox Docker (no rete, 256MB, 128 pid)
                                                     ▲
   Tutor agent (roadmap) ─┐                          │
   Fixer agent (oggi)  ───┼── MCPClient ──► server MCP: guardrail ─► exec_in_sandbox
@@ -45,7 +45,7 @@ riferimento il check non passa, oppure se il container non è più sano.
 
 ## Installazione
 
-Serve Python **3.11–3.13** (datapizza-ai non supporta 3.14). Con `uv` si ottiene senza toccare il Python di sistema:
+Serve Python **3.11–3.13**. Con `uv` si ottiene senza toccare il Python di sistema:
 
 ```powershell
 py -m pip install --user uv
@@ -55,7 +55,7 @@ py -m uv pip install --python .venv\Scripts\python.exe -e .
 copy .env.example .env   # di default usa Ollama in locale: nessuna API key
 ```
 
-**Modello locale (default).** Installa [Ollama](https://ollama.com), poi:
+**Modello locale (default).** Si installa [Ollama](https://ollama.com), poi:
 
 ```powershell
 ollama pull qwen3:4b-instruct
@@ -63,7 +63,7 @@ ollama create breakfix-qwen3 -f ollama/Modelfile   # stesso modello, contesto a 
 ```
 
 Gira anche solo su CPU: con un Core Ultra 7 (32 GB) fa circa 18 token/s e un giro del fixer
-sulla sandbox mock dura meno di un minuto. Per usare un modello cloud imposta `LLM_PROVIDER` e la
+sulla sandbox mock dura meno di un minuto. Per usare un modello cloud si imposta `LLM_PROVIDER` e la
 sua API key nel `.env` (vedi [Configurazione](#configurazione)).
 
 ## Avvio
@@ -80,10 +80,10 @@ Remove-Item Env:BREAKFIX_SANDBOX
 breakfix-sandbox up
 breakfix-sandbox exec "chmod 644 /srv/app/run.sh"   # rottura manuale, finché non ci sono gli scenari
 
-# 4a. Ripari tu: shell di root nella sandbox (exit per uscire)
+# 4a. Riparazione manuale da parte dell'utente: shell di root nella sandbox (exit per uscire)
 breakfix-sandbox shell
 
-# 4b. ...oppure guardi come lo risolve il fixer di riferimento
+# 4b. ...oppure si osserva come lo risolve il fixer di riferimento
 breakfix-agent "L'utente app non riesce ad avviare /srv/app/run.sh. Trova la causa e riparala."
 
 breakfix-sandbox down
@@ -152,7 +152,7 @@ attuale: `--reset-memory`.
 
 - `datapizza.tools.MCPClient` importa `streamablehttp_client`, rinominato in MCP SDK 2.x: il progetto fissa `mcp<2` e usa FastMCP v1.
 - `ContextTracing` tiene gli span in memoria e li **cancella all'uscita dal trace**: per un audit
-  trail persistente vanno letti con `get_spans()` dentro il blocco `with` (lo facciamo nel `finally`).
+  trail persistente vanno letti con `get_spans()` dentro il blocco `with` (avviene nel `finally`).
 - Il tag `qwen3:4b` di Ollama è la variante *thinking* (2507): ragiona sempre, anche con il thinking
   disattivato, e una risposta di una riga richiede minuti su CPU. Per l'agente serve `qwen3:4b-instruct`.
 - Ollama parte con un contesto di 4096 token e, quando sfora, scarta l'inizio della conversazione
