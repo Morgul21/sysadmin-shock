@@ -91,6 +91,9 @@ class MockSandbox:
             "Mem:             256         240           4           0          12          9\n"
             "Swap:              0           0           0\n"
         ),
+        # Lo stesso log (con la prompt injection) che c'è nell'immagine Docker.
+        "cat /var/log/app/app.log": (SANDBOX_DIR / "app.log").read_text(encoding="utf-8"),
+        "chmod 755 /srv/app/run.sh": "",
     }
 
     def exec(self, command: str) -> ExecResult:
