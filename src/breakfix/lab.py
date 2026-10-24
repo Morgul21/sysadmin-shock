@@ -30,21 +30,32 @@ APP_DIR = sandbox.SANDBOX_DIR / "app"
 APP_CODE = ("run.sh", "cache.py")
 CATEGORIES = ("permessi", "memoria")
 DIFFICULTIES = ("facile", "media", "difficile")
-# Il servizio di cui parlano i ticket: il nome è l'unica cosa che si sa in partenza.
-# Dove sta, come parte e con quale utente lo si scopre sul server (comando, unità systemd).
+# Il programma di cui parlano i ticket e l'utente con cui gira: il contesto che l'helpdesk
+# aggiunge a ogni ticket. Dove sta e come è fatto lo si scopre sul server.
 SERVICE = "gestionale"
+SERVICE_USER = "app"
 
 
 @dataclass(frozen=True)
 class Ticket:
-    """La segnalazione di un utente: vaga, a volte fuorviante, come quelle vere."""
+    """La segnalazione di un utente: vaga, a volte fuorviante, come quelle vere.
+
+    In coda il contesto dell'helpdesk (programma e utente), senza nulla sulla causa:
+    chi la legge deve sapere di cosa parla l'utente, non dove guardare.
+    """
 
     sender: str
     subject: str
     body: str
+    program: str = SERVICE
+    user: str = SERVICE_USER
 
     def __str__(self) -> str:
-        return f"Da: {self.sender}\nServizio: {SERVICE}\nOggetto: {self.subject}\n\n{self.body.strip()}"
+        return (
+            f"Da: {self.sender}\nOggetto: {self.subject}\n\n{self.body.strip()}\n\n"
+            f"[Helpdesk] Programma: {self.program} (si avvia con il comando `{self.program}`)\n"
+            f"[Helpdesk] Utente con cui gira: {self.user}"
+        )
 
 
 @dataclass(frozen=True)
