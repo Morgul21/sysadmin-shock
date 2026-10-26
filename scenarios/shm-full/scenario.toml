@@ -4,8 +4,9 @@ difficulty = "difficile"
 # Nessun processo risulta grande: la memoria è nei file di /dev/shm (shmem nel cgroup).
 man = ["tmpfs(5)", "df(1)", "cgroups(7)"]
 hints = [
-    "La memoria può essere occupata anche da file, non solo da processi.",
-    "Alcuni filesystem vivono in RAM: controlla quanto spazio occupano.",
+    "Lancia `gestionale` e leggi l'errore: manca memoria, ma `ps aux --sort=-rss` non mostra processi grandi.",
+    "La memoria può essere occupata anche da file: i filesystem tmpfs vivono in RAM. `df -h` li elenca, e la riga shmem di `/sys/fs/cgroup/memory.stat` dice quanta ne usano.",
+    "In `/dev/shm` c'è un file di export da circa 200 MB lasciato da un job: occupa RAM finché esiste.",
 ]
 
 [ticket]

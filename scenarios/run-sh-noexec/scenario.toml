@@ -3,8 +3,9 @@ category = "permessi"
 difficulty = "facile"
 man = ["chmod(1)", "ls(1)", "stat(1)"]
 hints = [
-    "Riproduci l'errore come utente app: quale file viene negato?",
-    "Per eseguire un file non basta poterlo leggere.",
+    "Lancia `gestionale` e leggi l'errore: quale file viene negato? `cat \"$(which gestionale)\"` ti dice quale script avvia e con quale utente.",
+    "Guarda i permessi di quello script con `ls -l` o `stat`: quali bit ha chi lo deve eseguire?",
+    "Lo script di avvio si può leggere ma non eseguire: manca il bit di esecuzione. Il 777 del collega lo renderebbe anche scrivibile da tutti: basta il bit che manca.",
 ]
 
 [ticket]

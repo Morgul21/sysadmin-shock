@@ -3,8 +3,9 @@ category = "permessi"
 difficulty = "media"
 man = ["chown(1)", "ls(1)", "find(1)"]
 hints = [
-    "Un programma avviato da root crea i suoi file come root.",
-    "Guarda proprietario e permessi dei file che l'app scrive.",
+    "Lancia `gestionale` e leggi l'errore: quale file non riesce a scrivere? Il ticket parla di un avvio fatto a mano: con quale utente?",
+    "Guarda il proprietario dei file che l'app scrive (la directory dei dati è nella configurazione): `ls -l`, oppure `find /srv/app -user root` trova quelli di root.",
+    "Il file `last-start` è stato creato da un avvio come root ed è rimasto di root: l'utente app non può più sovrascriverlo.",
 ]
 
 [ticket]

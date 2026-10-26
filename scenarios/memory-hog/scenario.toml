@@ -3,8 +3,9 @@ category = "memoria"
 difficulty = "media"
 man = ["ps(1)", "kill(1)", "proc(5)"]
 hints = [
-    "Il container ha un limite di memoria suo: chi la sta usando?",
-    "Ordina i processi per memoria residente; non fermare il container.",
+    "Lancia `gestionale` e leggi l'errore: manca memoria. Il container ha un limite suo (`cat /sys/fs/cgroup/memory.max`): chi la sta usando?",
+    "Ordina i processi per memoria residente con `ps aux --sort=-rss`: il primo non è l'app.",
+    "Un job dei report (uno script Python in `/opt`) tiene occupati circa 200 MB. Va fermato quel processo, non il container (il processo 1).",
 ]
 
 [ticket]

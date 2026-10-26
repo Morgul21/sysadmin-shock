@@ -4,8 +4,9 @@ difficulty = "media"
 # free mostra la memoria dell'host: il limite vero è nel cgroup del container.
 man = ["free(1)", "cgroups(7)", "proc(5)"]
 hints = [
-    "free mostra la memoria della macchina, non il limite del container.",
-    "Confronta quanto chiede l'app con il limite del cgroup del container.",
+    "Lancia `gestionale` e leggi l'errore: quanta memoria chiede l'app? Il ticket dice anche cosa è stato cambiato.",
+    "`free` mostra la memoria della macchina, non il limite del container: quello è in `/sys/fs/cgroup/memory.max`. Confrontalo con la cache richiesta nella configurazione dell'app.",
+    "La cache chiede 512 MB ma il container ne ha 256 in tutto: va riportata a un valore che ci stia, con margine per il resto.",
 ]
 
 [ticket]

@@ -4,8 +4,9 @@ difficulty = "media"
 # Stesso sintomo di run-sh-noexec, causa diversa: run.sh ha i permessi giusti, /srv no.
 man = ["path_resolution(7)", "namei(1)", "chmod(1)"]
 hints = [
-    "Il sintomo è lo stesso di un altro ticket, ma la causa potrebbe no: controlla prima di correggere.",
-    "Per arrivare a un file bisogna poter attraversare ogni directory del percorso.",
+    "Il sintomo è lo stesso di un altro ticket, ma la causa potrebbe no: prima di correggere, controlla con `ls -l` se lo script di avvio ha davvero i permessi sbagliati.",
+    "Per arrivare a un file bisogna poter attraversare ogni directory del percorso: `namei -l` sul percorso completo dello script mostra i permessi di ognuna, dalla radice in giù.",
+    "Lo script è a posto: è `/srv` a non essere attraversabile dagli altri utenti (manca la x), quindi app non arriva ai file che contiene.",
 ]
 
 [ticket]

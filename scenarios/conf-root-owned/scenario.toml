@@ -3,8 +3,9 @@ category = "permessi"
 difficulty = "facile"
 man = ["chown(1)", "chmod(1)", "stat(1)"]
 hints = [
-    "Il contenuto del file è giusto: guarda chi può leggerlo.",
-    "Il file contiene una password: la correzione non deve renderlo leggibile a tutti.",
+    "Lancia `gestionale` e leggi l'errore: quale file non riesce a leggere? Lo script di avvio (`cat \"$(which gestionale)\"`, poi lo script che chiama) dice dove sta la configurazione.",
+    "Guarda proprietario, gruppo e permessi della configurazione con `ls -l`: l'app gira come utente app.",
+    "La configurazione è di root e leggibile solo da root. Contiene una password: deve tornare leggibile all'utente app, non a tutti.",
 ]
 
 [ticket]
