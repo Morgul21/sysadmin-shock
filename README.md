@@ -39,14 +39,14 @@ riferimento il check non passa, oppure se il container non è più sano.
 | Backend sandbox Docker / mock | [src/breakfix/sandbox.py](src/breakfix/sandbox.py) |
 | Scenari + CLI `breakfix-sandbox` (start, check, validate) | [src/breakfix/lab.py](src/breakfix/lab.py), [scenarios/](scenarios/) |
 | Eval del fixer sugli scenari | [src/breakfix/evaluate.py](src/breakfix/evaluate.py) |
-| UI dell'esercizio (Streamlit): ticket, terminale, indizi, check | [src/breakfix/ui.py](src/breakfix/ui.py) |
+| UI dell'esercizio (FastAPI + xterm.js): ticket, terminale vero, indizi, check | [src/breakfix/web.py](src/breakfix/web.py), [src/breakfix/static/](src/breakfix/static/) |
 | Immagine della sandbox: l'app da rompere (+ log con prompt injection) | [sandbox/Dockerfile](sandbox/Dockerfile), [sandbox/app/](sandbox/app/), [sandbox/app.log](sandbox/app.log) |
 | Agente fixer di riferimento (multi-provider, memory persistente) | [src/breakfix/agent.py](src/breakfix/agent.py) |
 | Test contratto MCP + integrazione datapizza | [tests/test_server.py](tests/test_server.py) |
 | Test guardrail (bloccati / fix legittimi) | [tests/test_guardrail.py](tests/test_guardrail.py) |
 | Test end-to-end injection → blocco → audit (senza API key) | [tests/test_agent_trace.py](tests/test_agent_trace.py) |
 | Test struttura scenari + runner degli eval (senza Docker) | [tests/test_scenarios.py](tests/test_scenarios.py), [tests/test_evaluate.py](tests/test_evaluate.py) |
-| Test della UI: terminale e pagina senza spoiler (senza Docker) | [tests/test_ui.py](tests/test_ui.py) |
+| Test della UI: API senza spoiler, origine, websocket del terminale (senza Docker) | [tests/test_web.py](tests/test_web.py) |
 
 ## Installazione
 
@@ -101,16 +101,16 @@ breakfix-eval run-sh-noexec memory-hog
 breakfix-sandbox down
 ```
 
-**La UI** (`breakfix-ui`, Streamlit su http://localhost:8501) fa `list`, `start`, `shell` e `check`
-dal browser. A sinistra si sceglie il ticket e si preme *Avvia*; la sezione dell'esercizio mostra il
-ticket, *Come orientarsi* (i primi comandi di ogni ticket, eseguibili con un clic), gli indizi
+**La UI** (`breakfix-ui`, FastAPI su http://127.0.0.1:8000) fa `list`, `start`, `shell` e `check`
+dal browser. In alto si sceglie il ticket e si preme *Avvia*; la sezione dell'esercizio mostra il
+ticket, *Come orientarsi* (i primi comandi di ogni ticket: un clic li esegue nel terminale), gli indizi
 graduali (uno per volta, a richiesta: dove guardare, come verificarlo, la causa; mai il comando del
-fix) e il pulsante *Verifica*. *Esplora file* sfoglia la sandbox (`ls -la` e contenuto dei file) per
-chi non ricorda i percorsi, e porta il terminale nella directory che si sta guardando. Il terminale è una
-casella di comando: ogni comando è un `docker exec` con bash, da root e senza guardrail come la shell
-della CLI. La `cd` viene ricordata tra un comando e l'altro, ma i programmi a tutto schermo (`vim`,
-`top`, `less`) non funzionano e c'è il timeout di 15 s: per quelli resta `breakfix-sandbox shell`,
-sulla stessa sandbox. L'immagine va buildata una volta con `breakfix-sandbox up`.
+fix) e il pulsante *Verifica*. Accanto c'è un terminale vero ([xterm.js](https://xtermjs.org/), incluso
+nel pacchetto, quindi funziona anche offline): una bash di root con TTY nella sandbox, aperta con la
+Docker API e collegata alla pagina da un websocket. Tab, frecce, `vim`, `top` e `less` funzionano come
+in `breakfix-sandbox shell`, e come lì i comandi non passano dal guardrail. Chiusa la pagina, i processi
+della sessione ricevono SIGHUP come alla chiusura di un terminale. L'immagine va buildata una volta con
+`breakfix-sandbox up`.
 
 `breakfix-eval` scrive il report in `.breakfix/eval/<data>.json` ed esce con 1 se uno scenario
 non è stato riparato. Ogni scenario parte da un container nuovo e da una memory vuota.
@@ -208,6 +208,9 @@ Difesa a più livelli, dal più debole al più forte:
    gamba della *lethal trifecta* (dati + input non fidato + **canale di uscita**).
 4. Output troncato a 4000 caratteri e timeout di 15 s per comando; al server MCP arrivano solo
    l'ambiente minimo e le variabili `BREAKFIX_*`, non la API key del modello.
+5. **UI**: dà una shell di root nella sandbox, quindi ascolta solo su `127.0.0.1` e accetta POST e
+   websocket solo dalla pagina stessa (header `Origin`): un altro sito aperto nel browser non può
+   avviare scenari né aprire il terminale (i websocket non sono soggetti alla same-origin policy).
 
 **Audit trail.** Ogni esecuzione dell'agente è un trace di `ContextTracing`. Prima che il trace
 si chiuda, gli span (chiamate al modello con i token, chiamate ai tool con argomenti e risultato)

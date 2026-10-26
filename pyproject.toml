@@ -18,7 +18,10 @@ dependencies = [
   "mcp>=1.20,<2",
   "pydantic>=2,<3",
   "python-dotenv>=1",
-  "streamlit>=1.40,<2",
+  # la UI: API e websocket del terminale; il terminale usa la Docker API (exec con TTY)
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "docker>=7",
 ]
 
 [project.optional-dependencies]
@@ -30,7 +33,10 @@ breakfix-server = "breakfix.server:main"
 breakfix-agent = "breakfix.agent:main"
 breakfix-sandbox = "breakfix.lab:main"
 breakfix-eval = "breakfix.evaluate:main"
-breakfix-ui = "breakfix.ui:main"
+breakfix-ui = "breakfix.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+breakfix = ["static/*", "static/vendor/*"]

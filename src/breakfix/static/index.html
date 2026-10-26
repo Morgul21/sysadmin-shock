@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sysadmin Shock</title>
+  <link rel="stylesheet" href="/static/vendor/xterm.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header>
+    <h1>Sysadmin Shock</h1>
+    <label class="picker">
+      <span>Ticket</span>
+      <select id="scenarios"></select>
+    </label>
+    <button id="start" class="primary">Avvia</button>
+    <span id="busy" class="muted" hidden>Preparo la sandbox…</span>
+  </header>
+
+  <main>
+    <section id="exercise">
+      <p id="empty" class="card muted">Scegli un ticket in alto e premi <b>Avvia</b>: la sandbox riparte
+        sana e viene rotta come racconta il ticket.</p>
+      <p id="error" class="verdict fail" hidden></p>
+
+      <div id="active" hidden>
+        <h2 id="ticket-number"></h2>
+        <p id="ticket-meta" class="muted"></p>
+        <article class="card">
+          <p><b>Da:</b> <span id="ticket-sender"></span><br><b>Oggetto:</b> <span id="ticket-subject"></span></p>
+          <p id="ticket-body" class="body"></p>
+          <p id="ticket-helpdesk" class="muted small"></p>
+        </article>
+
+        <details class="card">
+          <summary>Come orientarsi</summary>
+          <p class="muted small">I primi passi di ogni ticket: un clic scrive il comando nel terminale e lo esegue.
+            Nel terminale il Tab completa comandi e percorsi.</p>
+          <div id="steps" class="steps"></div>
+          <p class="small"><b>Log:</b> <code>tail -n 20 &lt;file&gt;</code> ·
+            <b>Permessi:</b> <code>ls -l</code>, <code>stat</code>, <code>namei -l &lt;percorso&gt;</code>, <code>getfacl &lt;file&gt;</code><br>
+            <b>Memoria:</b> <code>free -m</code>, <code>df -h</code>, <code>cat /sys/fs/cgroup/memory.stat</code></p>
+        </details>
+
+        <div id="hints"></div>
+        <button id="next-hint"></button>
+        <p id="man" class="muted small" hidden></p>
+
+        <div class="actions">
+          <button id="check" class="primary">Verifica</button>
+        </div>
+        <div id="verdict" hidden>
+          <p id="verdict-status" class="verdict"></p>
+          <pre id="verdict-output"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="console">
+      <div id="terminal"></div>
+      <div id="closed" class="closed" hidden>
+        <span>Sessione chiusa.</span>
+        <button id="reconnect">Riapri il terminale</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/vendor/xterm.min.js"></script>
+  <script src="/static/vendor/addon-fit.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
