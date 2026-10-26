@@ -24,7 +24,9 @@ class ScenarioSetTest(unittest.TestCase):
     def test_every_scenario_is_complete(self) -> None:
         for s in self.scenarios:
             with self.subTest(s.id):
-                self.assertTrue(s.ticket.subject and s.ticket.body.strip() and s.hints and s.man)
+                self.assertTrue(s.ticket.subject and s.ticket.body.strip() and s.man)
+                # Graduati: dove guardare, come verificarlo, la causa.
+                self.assertGreaterEqual(len(s.hints), 3)
                 for name in ("break", "check", "fix"):
                     script = s.script(name)
                     self.assertNotIn("\r", script, f"{name}.sh ha fine riga CRLF")

@@ -18,6 +18,7 @@ dependencies = [
   "mcp>=1.20,<2",
   "pydantic>=2,<3",
   "python-dotenv>=1",
+  "streamlit>=1.40,<2",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,7 @@ breakfix-server = "breakfix.server:main"
 breakfix-agent = "breakfix.agent:main"
 breakfix-sandbox = "breakfix.lab:main"
 breakfix-eval = "breakfix.evaluate:main"
+breakfix-ui = "breakfix.ui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

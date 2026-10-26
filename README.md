@@ -39,12 +39,14 @@ riferimento il check non passa, oppure se il container non è più sano.
 | Backend sandbox Docker / mock | [src/breakfix/sandbox.py](src/breakfix/sandbox.py) |
 | Scenari + CLI `breakfix-sandbox` (start, check, validate) | [src/breakfix/lab.py](src/breakfix/lab.py), [scenarios/](scenarios/) |
 | Eval del fixer sugli scenari | [src/breakfix/evaluate.py](src/breakfix/evaluate.py) |
+| UI dell'esercizio (Streamlit): ticket, terminale, indizi, check | [src/breakfix/ui.py](src/breakfix/ui.py) |
 | Immagine della sandbox: l'app da rompere (+ log con prompt injection) | [sandbox/Dockerfile](sandbox/Dockerfile), [sandbox/app/](sandbox/app/), [sandbox/app.log](sandbox/app.log) |
 | Agente fixer di riferimento (multi-provider, memory persistente) | [src/breakfix/agent.py](src/breakfix/agent.py) |
 | Test contratto MCP + integrazione datapizza | [tests/test_server.py](tests/test_server.py) |
 | Test guardrail (bloccati / fix legittimi) | [tests/test_guardrail.py](tests/test_guardrail.py) |
 | Test end-to-end injection → blocco → audit (senza API key) | [tests/test_agent_trace.py](tests/test_agent_trace.py) |
 | Test struttura scenari + runner degli eval (senza Docker) | [tests/test_scenarios.py](tests/test_scenarios.py), [tests/test_evaluate.py](tests/test_evaluate.py) |
+| Test della UI: terminale e pagina senza spoiler (senza Docker) | [tests/test_ui.py](tests/test_ui.py) |
 
 ## Installazione
 
@@ -89,12 +91,26 @@ breakfix-sandbox start 2                 # sandbox nuova + rottura; stampa il ti
 breakfix-sandbox shell                   # shell di root sul server (exit per uscire)
 breakfix-sandbox check                   # PASS/FAIL dello scenario attivo
 
+# 4b. Lo stesso esercizio dal browser: ticket, terminale, indizi e check in una pagina
+breakfix-ui
+
 # 5. Il riferimento: il fixer su tutti gli scenari (o su alcuni), con passi e token
 breakfix-eval
 breakfix-eval run-sh-noexec memory-hog
 
 breakfix-sandbox down
 ```
+
+**La UI** (`breakfix-ui`, Streamlit su http://localhost:8501) fa `list`, `start`, `shell` e `check`
+dal browser. A sinistra si sceglie il ticket e si preme *Avvia*; la sezione dell'esercizio mostra il
+ticket, *Come orientarsi* (i primi comandi di ogni ticket, eseguibili con un clic), gli indizi
+graduali (uno per volta, a richiesta: dove guardare, come verificarlo, la causa; mai il comando del
+fix) e il pulsante *Verifica*. *Esplora file* sfoglia la sandbox (`ls -la` e contenuto dei file) per
+chi non ricorda i percorsi, e porta il terminale nella directory che si sta guardando. Il terminale è una
+casella di comando: ogni comando è un `docker exec` con bash, da root e senza guardrail come la shell
+della CLI. La `cd` viene ricordata tra un comando e l'altro, ma i programmi a tutto schermo (`vim`,
+`top`, `less`) non funzionano e c'è il timeout di 15 s: per quelli resta `breakfix-sandbox shell`,
+sulla stessa sandbox. L'immagine va buildata una volta con `breakfix-sandbox up`.
 
 `breakfix-eval` scrive il report in `.breakfix/eval/<data>.json` ed esce con 1 se uno scenario
 non è stato riparato. Ogni scenario parte da un container nuovo e da una memory vuota.

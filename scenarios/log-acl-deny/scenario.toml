@@ -4,8 +4,9 @@ difficulty = "difficile"
 # ls -l mostra il log scrivibile dal gruppo app: la causa si vede solo con getfacl.
 man = ["acl(5)", "getfacl(1)", "setfacl(1)"]
 hints = [
-    "ls -l non mostra tutti i permessi: il + dopo i bit è un indizio.",
-    "Alcune regole di accesso valgono per un singolo utente, non per il gruppo.",
+    "Lancia `gestionale`: questa volta il problema è il log. Dove scrive l'app? Lo dicono lo script di avvio e l'unità in `/etc/systemd/system/`.",
+    "`ls -l` dice che il gruppo app può scrivere il log, eppure non può. Il `+` dopo i permessi indica una ACL: leggila con `getfacl`.",
+    "Una ACL per l'utente app gli concede solo la lettura, e vale più dei permessi del gruppo. Va tolta quella regola: il log deve restare root:app, cambiare il proprietario non è la correzione giusta.",
 ]
 
 [ticket]
