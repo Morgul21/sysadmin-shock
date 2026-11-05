@@ -54,7 +54,10 @@ class ApiTest(unittest.TestCase):
         for path in ("/static/app.js", "/static/app.css", "/static/vendor/xterm.min.js",
                      "/static/vendor/addon-fit.min.js", "/static/vendor/xterm.min.css"):
             with self.subTest(path):
-                self.assertEqual(self.client.get(path).status_code, 200)
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                # Mai un app.js vecchio con un index.html nuovo: il browser ricontrolla sempre.
+                self.assertEqual(response.headers["cache-control"], "no-cache")
 
     def test_nothing_reveals_the_cause(self) -> None:
         # Come `breakfix-sandbox list`: né l'elenco né lo scenario attivo dicono id o titolo.

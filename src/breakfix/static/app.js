@@ -372,7 +372,14 @@ const term = new Terminal({
   cursorBlink: true,
   fontFamily: '"Cascadia Mono", Consolas, ui-monospace, monospace',
   fontSize: 14,
-  theme: { background: "#15181c" },
+  // Gli stessi toni della pagina (app.css): verde tenue su fondo verde-nero, cursore ambra.
+  theme: {
+    background: "#0a1311",
+    foreground: "#a6cdb8",
+    cursor: "#d9a441",
+    cursorAccent: "#0a1311",
+    selectionBackground: "#2f6e5c88",
+  },
 });
 const fit = new FitAddon.FitAddon();
 term.loadAddon(fit);

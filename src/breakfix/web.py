@@ -164,6 +164,15 @@ app = FastAPI(title="Sysadmin Shock")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+@app.middleware("http")
+async def no_stale_page(request: Request, call_next):
+    """Senza, il browser può tenere un app.js vecchio con un index.html nuovo (o il contrario) e la
+    pagina si rompe. no-cache lo obbliga a ricontrollare: con l'ETag, se il file non è cambiato, 304."""
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
