@@ -89,8 +89,8 @@ breakfix-sandbox validate          # scenari: sana passa, rotta fallisce, ripara
 
 # 4. Le basi: lezioni con esercizi verificati, che preparano ai ticket
 breakfix-sandbox lessons                 # la roadmap: percorsi, lezioni, esercizi, a quali ticket preparano
-breakfix-sandbox learn 5.1               # sandbox nuova + preparazione dell'esercizio; stampa il testo
-breakfix-sandbox check "backup.sh"       # esercizi di tipo risposta (quelli di stato: `check` e basta)
+breakfix-sandbox learn 1.1               # sandbox nuova + preparazione dell'esercizio; stampa il testo
+breakfix-sandbox check "uno.sh"          # esercizi di tipo risposta (quelli di stato: `check` e basta)
 
 # 5. Esercizio: si sceglie un ticket, lo si ripara dalla shell, si chiede il verdetto
 breakfix-sandbox list                    # numero, categoria, difficoltà, oggetto (niente spoiler)
@@ -142,23 +142,27 @@ Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>
 
 Chi parte da zero non sa ancora leggere `ls -l`: i ticket presuppongono dei comandi. Le basi li
 insegnano, ma solo quelli che servono ai ticket. La roadmap si ricava dai fix degli scenari, così i
-comandi da imparare restano pochi e ogni lezione ha uno scopo concreto:
+comandi da imparare restano pochi e ogni lezione ha uno scopo concreto.
 
-| Percorso | Lezione | Comandi | Prepara a |
-|---|---|---|---|
-| Orientarsi | 1. Chi sono, dove sono | `pwd` `ls` `cd` `id` `runuser` | tutti |
-| | 2. Leggere file e log | `cat` `less` `tail` `grep` | tutti |
-| | 3. Trovare le cose | `which` `find` | `stale-root-file` |
-| | 4. Combinare comandi | pipe, `xargs`, `find -exec`, redirect | `stale-root-file` |
-| Permessi | **5. Leggere i permessi** | `ls -l` `stat` `id`, quale terna conta | `run-sh-noexec` |
-| | **6. Ottale e simbolico** | `chmod 640` / `chmod u+x`, perché non 777 | `run-sh-noexec` |
-| | 7. Proprietari | `chown` `chgrp` | `conf-root-owned`, `stale-root-file` |
-| | 8. Le directory | la `x` su una cartella, `namei -l` | `srv-no-traverse` |
-| | 9. ACL | il `+` in `ls -l`, `getfacl` `setfacl` | `log-acl-deny` |
-| Processi e memoria | 10. Processi | `ps` `top` `kill`, segnali | `memory-hog` |
-| | 11. Memoria e limiti | `free`, `/proc/meminfo`, `df`, tmpfs, cgroup | `cache-too-big`, `shm-full` |
+Il tema di ogni lezione e di ogni esercizio è un **comando**, e il titolo dice cosa ci si fa
+("Trovare file con find", "Aggiungere un solo permesso con chmod in simbolico"): è quello che compare
+nel menu della UI.
 
-In grassetto le lezioni già scritte. Il collegamento sta negli scenari (`lessons = [5, 6]` in
+| Percorso | Lezione | Prepara a |
+|---|---|---|
+| Orientarsi | **1. Muoversi tra le cartelle con pwd, cd e ls** | tutti |
+| | **2. Leggere file e log con cat, tail e grep** | tutti |
+| | **3. Trovare file con find e comandi con which** | `stale-root-file` |
+| | **4. Combinare comandi con stdin, stdout, stderr, pipe e xargs** | `stale-root-file` |
+| Permessi | **5. Leggere i permessi con ls, stat e id** | `run-sh-noexec` |
+| | **6. Cambiare i permessi con chmod** | `run-sh-noexec` |
+| | 7. Cambiare proprietario e gruppo con chown e chgrp | `conf-root-owned`, `stale-root-file` |
+| | 8. Controllare un percorso intero con namei | `srv-no-traverse` |
+| | 9. Leggere e togliere le ACL con getfacl e setfacl | `log-acl-deny` |
+| Processi e memoria | 10. Trovare e fermare processi con ps e kill | `memory-hog` |
+| | 11. Misurare la memoria con free, df e i cgroup | `cache-too-big`, `shm-full` |
+
+In grassetto le lezioni già scritte. Il collegamento sta negli scenari (es. `lessons = [5, 6]` in
 `scenario.toml`): la UI mostra nel ticket le lezioni che preparano, e alla fine di una lezione propone
 il ticket.
 
@@ -283,7 +287,7 @@ attuale: `--reset-memory`.
 - [x] **S14** 8 scenari (5 permessi + 3 memoria) con rottura, check e fix di riferimento, validati su Docker; `breakfix-eval` per il fixer (pass/fail, passi, token)
 - [x] **S14–S15** Indizi graduali scritti a mano per ogni ticket ed esercizio, con le man page (al posto del tutor LLM, spostato negli extra)
 - [x] **S15** UI nel browser (`breakfix-ui`): ticket, terminale vero, indizi, verifica
-- [ ] **S15** Basi: roadmap di 11 lezioni in 3 percorsi, ricavata dai ticket; scritte la 5 e la 6 (6 esercizi, validati su Docker)
+- [ ] **S15** Basi: roadmap di 11 lezioni in 3 percorsi, ricavata dai ticket; scritte le lezioni 1–6 (20 esercizi, validati su Docker)
 - [ ] **S15** README finale. Il lab resta fuori da un container: la UI apre shell nella sandbox via Docker API, e containerizzarla vorrebbe dire montare il socket di Docker (root sull'host)
 - [ ] Extra: tutor LLM con guardrail di output "niente spoiler", DagPipeline Author→Breaker→Validator dalle man page, eval in CI
 

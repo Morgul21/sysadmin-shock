@@ -130,15 +130,15 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(self.client.post("/api/learn/99.1").status_code, 404)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(start.call_args.args[0].key, "6.2")
-        self.assertEqual(response.json()["lesson"]["title"], "Ottale e simbolico")
+        self.assertEqual(response.json()["lesson"]["title"], "Cambiare i permessi con chmod")
 
     def test_check_sends_the_answer_to_the_exercise(self) -> None:
         with self._active("esercizio:5.1"), mock.patch.object(web.LessonLab, "__init__", return_value=None), \
                 mock.patch.object(web.LessonLab, "check", return_value=CheckResult(False, "FAIL: no")) as check:
-            response = self.client.post("/api/check", json={"answer": "backup.sh"})
+            response = self.client.post("/api/check", json={"answer": "uno.sh"})
         self.assertEqual(response.json(), {"passed": False, "output": "FAIL: no"})
         exercise, answer = check.call_args.args
-        self.assertEqual((exercise.key, answer), ("5.1", "backup.sh"))
+        self.assertEqual((exercise.key, answer), ("5.1", "uno.sh"))
         too_long = {"answer": "x" * 1000}
         with self._active("esercizio:5.1"):
             self.assertEqual(self.client.post("/api/check", json=too_long).status_code, 422)

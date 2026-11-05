@@ -54,12 +54,14 @@ class LessonSetTest(unittest.TestCase):
             lessons.get_exercise("99.1")
 
     def test_task_and_hints_do_not_give_the_solution(self) -> None:
-        # Come per i ticket: comando + primo argomento della soluzione (es. "chmod 640") non compare.
+        # Più largo che per i ticket: qui il tema è il comando, e gli indizi ne nominano le opzioni
+        # (es. `tail -n`). Non deve comparire il comando di soluzione già pronto da copiare.
         for e in self.exercises:
             text = e.task + "\n" + "\n".join(e.hints)
             for command in _commands((e.path / "solution.sh").read_text(encoding="utf-8")):
-                with self.subTest(e.key, command=command):
-                    self.assertNotIn(" ".join(command.split()[:2]), text)
+                ready = command.replace('"$EX', "/srv/esercizi").replace('"', "")
+                with self.subTest(e.key, command=ready):
+                    self.assertNotIn(ready, text)
 
     def test_the_answer_reaches_the_check_as_data(self) -> None:
         # La risposta è testo di chi si esercita: arriva quotata, non diventa un comando.

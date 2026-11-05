@@ -1,0 +1,51 @@
+title = "Cambiare i permessi con chmod"
+track = "permessi"
+man = ["chmod(1)", "stat(1)"]
+
+[[exercises]]
+id = "chmod-ottale"
+title = "Impostare tutti i permessi con chmod in ottale"
+kind = "stato"
+task = '''
+Il file `/srv/esercizi/dati.txt` ha dei permessi sbagliati: guardali con `ls -l /srv/esercizi`.
+Con `chmod` e un numero ottale portalo a `rw-r-----`: il proprietario legge e scrive, il gruppo
+legge soltanto, gli altri niente. Proprietario e gruppo del file non vanno cambiati.
+
+Controlla il risultato con `stat -c '%A %a' /srv/esercizi/dati.txt`, poi premi Verifica.
+'''
+hints = [
+    "Converti una terna alla volta: r=4, w=2, x=1, e un `-` vale 0. Somma i valori di ogni terna.",
+    "`rw-` è 4+2, `r--` è 4, `---` è 0. Le tre cifre vanno scritte nell'ordine proprietario, gruppo, altri.",
+]
+
+[[exercises]]
+id = "chmod-simbolico"
+title = "Aggiungere un solo permesso con chmod in simbolico"
+kind = "stato"
+task = '''
+Il file `/srv/esercizi/script.sh` non è eseguibile da nessuno: guardalo con `ls -l /srv/esercizi`.
+Aggiungi il permesso di esecuzione **solo al proprietario**, con la notazione simbolica di `chmod`
+(chi, operazione, permesso). Tutti gli altri permessi devono restare come sono.
+
+Controlla con `ls -l`: deve essere cambiata una sola lettera.
+'''
+hints = [
+    "Chi: `u` è il proprietario. Operazione: `+` aggiunge. Permesso: `x` è l'esecuzione.",
+    "Con un numero ottale riscriveresti tutte e tre le terne: qui ti serve la notazione che cambia solo quello che nomini.",
+]
+
+[[exercises]]
+id = "chmod-ricorsivo"
+title = "Togliere un permesso a una cartella intera con chmod -R"
+kind = "stato"
+task = '''
+La cartella `/srv/esercizi/cartella` contiene file e sottocartelle, con permessi diversi tra loro:
+guardali tutti con `ls -lR /srv/esercizi/cartella` (`-R` scende nelle sottocartelle).
+
+Togli agli **altri** (`o`) ogni permesso, sulla cartella e su tutto quello che contiene, con un solo
+comando `chmod` ricorsivo. I permessi di proprietario e gruppo devono restare com'erano, file per file.
+'''
+hints = [
+    "Anche `chmod` ha un'opzione per scendere nelle sottocartelle, come `ls -R`.",
+    "Un solo numero ottale darebbe a file e cartelle gli stessi permessi, cancellando le differenze: usa la notazione simbolica per togliere `rwx` solo a `o`.",
+]
