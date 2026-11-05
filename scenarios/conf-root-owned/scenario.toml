@@ -2,6 +2,8 @@ title = "Configurazione illeggibile"
 category = "permessi"
 difficulty = "facile"
 man = ["chown(1)", "chmod(1)", "stat(1)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [5, 6, 7]
 hints = [
     "Lancia `gestionale` e leggi l'errore: quale file non riesce a leggere? Lo script di avvio (`cat \"$(which gestionale)\"`, poi lo script che chiama) dice dove sta la configurazione.",
     "Guarda proprietario, gruppo e permessi della configurazione con `ls -l`: l'app gira come utente app.",

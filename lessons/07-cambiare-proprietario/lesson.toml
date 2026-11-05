@@ -1,0 +1,58 @@
+title = "Cambiare proprietario e gruppo con chown e chgrp"
+track = "permessi"
+man = ["chown(1)", "chgrp(1)", "ls(1)"]
+
+[[exercises]]
+id = "chown-utente"
+title = "Cambiare il proprietario di un file con chown"
+kind = "stato"
+task = '''
+Il file `/srv/esercizi/report.txt` appartiene a `root`, ma deve appartenere all'utente `app`.
+Cambia il **proprietario** con `chown`, lasciando il gruppo com'è. Controlla con `ls -l /srv/esercizi`.
+'''
+hints = [
+    "La forma più semplice è `chown` seguito dal nuovo proprietario e dal file.",
+    "Se scrivi solo l'utente, senza `:gruppo`, `chown` cambia il proprietario e non tocca il gruppo.",
+]
+
+[[exercises]]
+id = "chgrp"
+title = "Cambiare solo il gruppo di un file con chgrp"
+kind = "stato"
+task = '''
+Il file `/srv/esercizi/turni.csv` deve essere leggibile da chi è nel gruppo `tecnici`: i permessi
+del gruppo ci sono già (`ls -l`), ma il gruppo del file è sbagliato. Cambialo in `tecnici` con
+`chgrp`, senza toccare il proprietario.
+'''
+hints = [
+    "`chgrp` funziona come `chown`, ma cambia solo il gruppo: prima il gruppo, poi il file.",
+    "Per controllare chi è nel gruppo: `getent group tecnici`.",
+]
+
+[[exercises]]
+id = "chown-utente-gruppo"
+title = "Cambiare proprietario e gruppo insieme con chown utente:gruppo"
+kind = "stato"
+task = '''
+Il file `/srv/esercizi/config.ini` è stato ricreato da `root` e ora appartiene a `root:root`. Deve
+tornare all'utente `anna` e al gruppo `tecnici`: cambia proprietario e gruppo con **un solo** comando
+`chown`. I permessi del file vanno lasciati come sono.
+'''
+hints = [
+    "`chown` accetta `utente:gruppo`: le due parti separate da due punti.",
+    "Non serve `chmod`: proprietario e gruppo sono una cosa, i permessi un'altra.",
+]
+
+[[exercises]]
+id = "chown-ricorsivo"
+title = "Cambiare il proprietario di una cartella intera con chown -R"
+kind = "stato"
+task = '''
+La cartella `/srv/esercizi/sito` e tutto il suo contenuto devono appartenere a `app:app`, ma qualcuno
+ha lavorato da `root` e alcuni file e sottocartelle ora sono suoi. Guarda con `ls -lR /srv/esercizi/sito`,
+poi sistema tutto con un solo comando `chown` ricorsivo. I permessi non vanno toccati.
+'''
+hints = [
+    "Come `chmod -R` e `ls -R`, anche `chown` ha un'opzione per scendere nelle sottocartelle.",
+    "Per controllare che non sia rimasto niente di root: `find /srv/esercizi/sito -user root`.",
+]

@@ -3,7 +3,7 @@ category = "permessi"
 difficulty = "media"
 man = ["chown(1)", "ls(1)", "find(1)"]
 # Le lezioni delle basi che preparano a questo ticket.
-lessons = [3, 4]
+lessons = [3, 4, 7]
 hints = [
     "Lancia `gestionale` e leggi l'errore: quale file non riesce a scrivere? Il ticket parla di un avvio fatto a mano: con quale utente?",
     "Guarda il proprietario dei file che l'app scrive (la directory dei dati è nella configurazione): `ls -l`, oppure `find /srv/app -user root` trova quelli di root.",

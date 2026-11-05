@@ -3,6 +3,8 @@ category = "memoria"
 difficulty = "difficile"
 # Nessun processo risulta grande: la memoria è nei file di /dev/shm (shmem nel cgroup).
 man = ["tmpfs(5)", "df(1)", "cgroups(7)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [11]
 hints = [
     "Lancia `gestionale` e leggi l'errore: manca memoria, ma `ps aux --sort=-rss` non mostra processi grandi.",
     "La memoria può essere occupata anche da file: i filesystem tmpfs vivono in RAM. `df -h` li elenca, e la riga shmem di `/sys/fs/cgroup/memory.stat` dice quanta ne usano.",

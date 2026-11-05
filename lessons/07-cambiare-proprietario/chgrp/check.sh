@@ -1,0 +1,6 @@
+f="$EX/turni.csv"
+[ "$(stat -c %G "$f")" = tecnici ] || fail "il gruppo di turni.csv è $(stat -c %G "$f"), non tecnici"
+[ "$(stat -c %U "$f")" = "$(saved turni.owner)" ] || fail "il proprietario doveva restare $(saved turni.owner)"
+[ "$(mode "$f")" = 640 ] || fail "i permessi sono cambiati: $(stat -c %A "$f")"
+runuser -u luca -- test -r "$f" || fail "luca (gruppo tecnici) non riesce ancora a leggere turni.csv"
+pass "turni.csv è del gruppo tecnici: luca ora lo legge"

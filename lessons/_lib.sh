@@ -47,5 +47,27 @@ expect_path() {
     fail "\"$ANSWER\" non è il percorso giusto (scrivi il percorso completo, che inizia con /)"
 }
 
+# Avvia /opt/lavori/<nome>.py in background: occupa <MB> di memoria e resta in attesa; con un terzo
+# argomento ignora il segnale TERM. setsid e i redirect lo staccano dal setup, che può finire.
+# Aspetta che la memoria sia occupata davvero, altrimenti il check vedrebbe un processo vuoto.
+job() {
+    mkdir -p /opt/lavori
+    {
+        echo "import signal, time"
+        [ -z "$3" ] || echo "signal.signal(signal.SIGTERM, signal.SIG_IGN)"
+        echo "data = 'x' * ($2 * 2**20)"
+        echo "while True:"
+        echo "    time.sleep(3600)"
+    } > "/opt/lavori/$1.py"
+    setsid nohup python3 "/opt/lavori/$1.py" < /dev/null > /dev/null 2>&1 &
+    for _ in $(seq 40); do
+        rss=$(ps -o rss= -p "$(pgrep -f "/opt/lavori/$1.py" | head -1)" 2>/dev/null | tr -d ' ') || rss=0
+        [ "${rss:-0}" -gt $(( $2 * 900 )) ] && return 0
+        sleep 0.25
+    done
+    echo "il lavoro $1 non ha occupato la memoria" >&2
+    exit 1
+}
+
 # Permessi in ottale, senza zeri davanti (640, 4755).
 mode() { stat -c %a "$1"; }

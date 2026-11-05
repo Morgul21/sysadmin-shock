@@ -1,0 +1,64 @@
+title = "Leggere e cambiare le ACL con getfacl e setfacl"
+track = "permessi"
+man = ["acl(5)", "getfacl(1)", "setfacl(1)"]
+
+[[exercises]]
+id = "riconoscere"
+title = "Riconoscere un file con ACL dal + di ls -l"
+kind = "risposta"
+task = '''
+In `/srv/esercizi` ci sono cinque file. Uno solo ha un'**ACL**, cioè dei permessi in più oltre alle
+tre terne. `ls -l /srv/esercizi` lo segnala con un carattere in più, subito dopo i permessi. Quale file
+è? Scrivi il nome.
+'''
+hints = [
+    "Guarda la fine della prima colonna: di solito sono dieci caratteri, con un'ACL ce n'è un undicesimo.",
+    "Il carattere è un `+`, come in `-rw-rw-r--+`.",
+]
+
+[[exercises]]
+id = "getfacl"
+title = "Leggere un'ACL con getfacl"
+kind = "risposta"
+task = '''
+Il file `/srv/esercizi/progetto.txt` ha un'ACL che dà permessi a più utenti, uno per riga. Leggila
+con `getfacl /srv/esercizi/progetto.txt`: quali permessi ha l'utente `luca`? Rispondi con i tre
+caratteri, nella forma di `ls -l` (es. `r-x`).
+'''
+hints = [
+    "Le righe `user::` e `group::` (senza nome) sono le terne normali. Le righe con un nome, come `user:anna:`, sono l'ACL.",
+    "La riga che cerchi comincia con `user:luca:`. Se in fondo alla riga c'è `#effective:`, valgono i permessi scritti lì.",
+]
+
+[[exercises]]
+id = "setfacl-m"
+title = "Dare un permesso a un solo utente con setfacl -m"
+kind = "stato"
+task = '''
+L'utente `anna` deve poter **leggere** `/srv/esercizi/bilancio.csv`, ma non è il proprietario e non è
+nel gruppo del file, e gli altri non devono poterlo leggere. Con le tre terne non si può fare senza
+coinvolgere altri utenti: aggiungi ad `anna` il solo permesso di lettura con un'ACL. Proprietario,
+gruppo e permessi degli altri non vanno toccati.
+
+Verifica con `runuser -u anna -- cat /srv/esercizi/bilancio.csv`.
+'''
+hints = [
+    "`setfacl -m` (*modify*) aggiunge o cambia una voce. La voce di un utente si scrive `u:nome:permessi`.",
+    "Solo lettura vuol dire `r`. Poi controlla con `getfacl`.",
+]
+
+[[exercises]]
+id = "setfacl-x"
+title = "Togliere una voce di un'ACL con setfacl -x"
+kind = "stato"
+task = '''
+L'utente `luca` è nel gruppo del file `/srv/esercizi/registro.log`, che può scriverci (`ls -l`), eppure
+riceve `Permission denied`: c'è una voce dell'ACL solo per lui che gli toglie tutto. Togli **quella
+voce**, e solo quella: le altre voci dell'ACL, i permessi e il proprietario restano come sono.
+
+Verifica con `runuser -u luca -- sh -c 'echo prova >> /srv/esercizi/registro.log'`.
+'''
+hints = [
+    "Guarda l'ACL con `getfacl`: la voce che blocca luca comincia con `user:luca:`.",
+    "`setfacl -m` aggiunge voci, `setfacl -x` le toglie. Per toglierne una basta dire di chi è: `u:nome`, senza permessi.",
+]

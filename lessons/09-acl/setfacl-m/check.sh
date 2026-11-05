@@ -1,0 +1,10 @@
+f="$EX/bilancio.csv"
+[ "$(stat -c %U:%G "$f")" = root:contabilita ] || fail "proprietario e gruppo dovevano restare root:contabilita"
+runuser -u anna -- test -r "$f" || fail "anna non riesce ancora a leggere bilancio.csv"
+! runuser -u anna -- test -w "$f" || fail "anna può anche scrivere: doveva solo leggere"
+runuser -u app -- test -r "$f" && fail "anche app (uno degli altri) ora può leggere: andava aperto solo ad anna"
+acl=$(getfacl -p "$f" 2>/dev/null)
+echo "$acl" | grep -q '^user::rw-$' || fail "i permessi del proprietario sono cambiati"
+echo "$acl" | grep -q '^group::r--$' || fail "i permessi del gruppo sono cambiati"
+echo "$acl" | grep -q '^other::---$' || fail "i permessi degli altri sono cambiati"
+pass "anna legge bilancio.csv grazie all'ACL ($(echo "$acl" | grep '^user:anna:')), il resto è com'era"

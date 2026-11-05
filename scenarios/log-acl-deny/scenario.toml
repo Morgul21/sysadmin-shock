@@ -3,6 +3,8 @@ category = "permessi"
 difficulty = "difficile"
 # ls -l mostra il log scrivibile dal gruppo app: la causa si vede solo con getfacl.
 man = ["acl(5)", "getfacl(1)", "setfacl(1)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [9]
 hints = [
     "Lancia `gestionale`: questa volta il problema è il log. Dove scrive l'app? Lo dicono lo script di avvio e l'unità in `/etc/systemd/system/`.",
     "`ls -l` dice che il gruppo app può scrivere il log, eppure non può. Il `+` dopo i permessi indica una ACL: leggila con `getfacl`.",

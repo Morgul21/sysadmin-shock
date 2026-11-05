@@ -148,21 +148,21 @@ Il tema di ogni lezione e di ogni esercizio è un **comando**, e il titolo dice 
 ("Trovare file con find", "Aggiungere un solo permesso con chmod in simbolico"): è quello che compare
 nel menu della UI.
 
-| Percorso | Lezione | Prepara a |
-|---|---|---|
-| Orientarsi | **1. Muoversi tra le cartelle con pwd, cd e ls** | tutti |
-| | **2. Leggere file e log con cat, tail e grep** | tutti |
-| | **3. Trovare file con find e comandi con which** | `stale-root-file` |
-| | **4. Combinare comandi con stdin, stdout, stderr, pipe e xargs** | `stale-root-file` |
-| Permessi | **5. Leggere i permessi con ls, stat e id** | `run-sh-noexec` |
-| | **6. Cambiare i permessi con chmod** | `run-sh-noexec` |
-| | 7. Cambiare proprietario e gruppo con chown e chgrp | `conf-root-owned`, `stale-root-file` |
-| | 8. Controllare un percorso intero con namei | `srv-no-traverse` |
-| | 9. Leggere e togliere le ACL con getfacl e setfacl | `log-acl-deny` |
-| Processi e memoria | 10. Trovare e fermare processi con ps e kill | `memory-hog` |
-| | 11. Misurare la memoria con free, df e i cgroup | `cache-too-big`, `shm-full` |
+| Percorso | Lezione | Esercizi | Prepara a |
+|---|---|---|---|
+| Orientarsi | 1. Muoversi tra le cartelle con pwd, cd e ls | 3 | tutti |
+| | 2. Leggere file e log con cat, tail e grep | 3 | tutti |
+| | 3. Trovare file con find e comandi con which | 3 | `stale-root-file` |
+| | 4. Combinare comandi con stdin, stdout, stderr, pipe e xargs | 5 | `stale-root-file` |
+| Permessi | 5. Leggere i permessi con ls, stat e id | 3 | `run-sh-noexec`, `conf-root-owned`, `srv-no-traverse` |
+| | 6. Cambiare i permessi con chmod | 3 | `run-sh-noexec`, `conf-root-owned` |
+| | 7. Cambiare proprietario e gruppo con chown e chgrp | 4 | `conf-root-owned`, `stale-root-file` |
+| | 8. Controllare un percorso intero con ls -ld e namei | 3 | `srv-no-traverse` |
+| | 9. Leggere e cambiare le ACL con getfacl e setfacl | 4 | `log-acl-deny` |
+| Processi e memoria | 10. Trovare e fermare processi con ps e kill | 4 | `memory-hog` |
+| | 11. Misurare memoria e spazio con free, df, du e i cgroup | 4 | `cache-too-big`, `shm-full` |
 
-In grassetto le lezioni già scritte. Il collegamento sta negli scenari (es. `lessons = [5, 6]` in
+39 esercizi in tutto (`breakfix-sandbox lessons` li elenca). Il collegamento sta negli scenari (es. `lessons = [5, 6]` in
 `scenario.toml`): la UI mostra nel ticket le lezioni che preparano, e alla fine di una lezione propone
 il ticket.
 
@@ -287,7 +287,7 @@ attuale: `--reset-memory`.
 - [x] **S14** 8 scenari (5 permessi + 3 memoria) con rottura, check e fix di riferimento, validati su Docker; `breakfix-eval` per il fixer (pass/fail, passi, token)
 - [x] **S14–S15** Indizi graduali scritti a mano per ogni ticket ed esercizio, con le man page (al posto del tutor LLM, spostato negli extra)
 - [x] **S15** UI nel browser (`breakfix-ui`): ticket, terminale vero, indizi, verifica
-- [ ] **S15** Basi: roadmap di 11 lezioni in 3 percorsi, ricavata dai ticket; scritte le lezioni 1–6 (20 esercizi, validati su Docker)
+- [x] **S15** Basi: 11 lezioni in 3 percorsi, ricavate dai ticket, con 39 esercizi validati su Docker; ogni ticket rimanda alle lezioni che lo preparano
 - [ ] **S15** README finale. Il lab resta fuori da un container: la UI apre shell nella sandbox via Docker API, e containerizzarla vorrebbe dire montare il socket di Docker (root sull'host)
 - [ ] Extra: tutor LLM con guardrail di output "niente spoiler", DagPipeline Author→Breaker→Validator dalle man page, eval in CI
 

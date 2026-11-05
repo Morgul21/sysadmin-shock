@@ -1,0 +1,56 @@
+title = "Trovare e fermare processi con ps e kill"
+track = "processi e memoria"
+man = ["ps(1)", "kill(1)", "pgrep(1)", "signal(7)"]
+
+[[exercises]]
+id = "ps-utente"
+title = "Elencare i processi di un utente con ps -u"
+kind = "risposta"
+task = '''
+Sul server girano processi di più utenti. Quanti processi sta eseguendo l'utente `luca`? Elencali con
+`ps` e scrivi il numero.
+'''
+hints = [
+    "`ps aux` mostra i processi di tutti, con l'utente nella prima colonna; `ps -u luca` solo quelli di luca.",
+    "`ps -u luca` stampa anche una riga di intestazione (`PID TTY …`), che non va contata.",
+]
+
+[[exercises]]
+id = "ps-memoria"
+title = "Trovare il processo che usa più memoria con ps --sort"
+kind = "risposta"
+task = '''
+Alcuni programmi in `/opt/lavori` stanno girando e occupano memoria. Quale processo ne usa di più?
+Scrivi il suo **PID** (il numero che identifica il processo, seconda colonna di `ps aux`).
+'''
+hints = [
+    "In `ps aux` la memoria vera occupata da un processo è la colonna `RSS`, in kilobyte.",
+    "`ps aux --sort=-rss` mette in cima chi ne usa di più (il `-` vuol dire in ordine decrescente).",
+]
+
+[[exercises]]
+id = "kill"
+title = "Fermare un processo con kill"
+kind = "stato"
+task = '''
+Il programma `/opt/lavori/esporta.py` è partito per sbaglio e va fermato. Trova il suo PID e fermalo
+con `kill`. Gli altri programmi di `/opt/lavori` devono continuare a girare.
+'''
+hints = [
+    "Per trovare il PID: `ps aux | grep esporta`, oppure `pgrep -af esporta`.",
+    "`kill` seguito dal PID chiede al processo di terminare. Controlla con `ps aux` che sia sparito solo lui.",
+]
+
+[[exercises]]
+id = "kill-9"
+title = "Fermare un processo che non risponde con kill -9"
+kind = "stato"
+task = '''
+Il programma `/opt/lavori/bloccato.py` va fermato, ma ignora la richiesta di terminare: prova con
+`kill` e guarda che resta lì. Fermalo con il segnale che un processo non può ignorare. L'altro
+programma di `/opt/lavori` deve continuare a girare.
+'''
+hints = [
+    "`kill PID` manda il segnale `TERM` (15): il processo può intercettarlo o ignorarlo.",
+    "Il segnale `KILL` (9) lo ferma il kernel, senza chiedere niente al processo: `kill -l` elenca i segnali.",
+]

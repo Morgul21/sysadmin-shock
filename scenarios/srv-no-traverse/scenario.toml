@@ -3,6 +3,8 @@ category = "permessi"
 difficulty = "media"
 # Stesso sintomo di run-sh-noexec, causa diversa: run.sh ha i permessi giusti, /srv no.
 man = ["path_resolution(7)", "namei(1)", "chmod(1)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [5, 8]
 hints = [
     "Il sintomo è lo stesso di un altro ticket, ma la causa potrebbe no: prima di correggere, controlla con `ls -l` se lo script di avvio ha davvero i permessi sbagliati.",
     "Per arrivare a un file bisogna poter attraversare ogni directory del percorso: `namei -l` sul percorso completo dello script mostra i permessi di ognuna, dalla radice in giù.",
