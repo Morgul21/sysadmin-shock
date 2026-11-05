@@ -10,6 +10,13 @@ hints = [
     "Lo script di avvio si può leggere ma non eseguire: manca il bit di esecuzione. Il 777 del collega lo renderebbe anche scrivibile da tutti: basta il bit che manca.",
 ]
 
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\bchmod\s+(?:-\S+\s+)*[ugoa,+=rwxXst0-7-]+\s+\S*run\.sh',
+]
+
 [ticket]
 from = "Giulia (amministrazione)"
 subject = "Il gestionale non si apre"

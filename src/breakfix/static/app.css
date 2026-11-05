@@ -295,6 +295,26 @@ code {
   margin: 0 0 8px;
 }
 
+#tutor { margin: 10px 0; }
+.tutor-log p { margin: 0 0 8px; }
+.tutor-question { color: var(--strong); font: 13px var(--mono); padding-left: 10px; border-left: 2px solid var(--label); }
+.tutor-answer { background: var(--hint-bg); border-left: 3px solid var(--accent); border-radius: 3px; padding: 10px 14px; }
+.tutor-answer.blocked { border-left-color: var(--amber); }
+.tutor-note { display: block; color: var(--amber); font: 12px var(--mono); margin-bottom: 4px; }
+.tutor-form { display: flex; gap: 8px; align-items: flex-end; }
+.tutor-form textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  font: 14px/1.4 var(--mono);
+  padding: 6px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border-light);
+  background: var(--code-bg);
+  color: var(--code-text);
+}
+.tutor-form textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
 .verdict { border-radius: 3px; padding: 10px 14px; margin: 0; font: 600 14px var(--mono); }
 .verdict.pass { background: var(--pass-bg); color: var(--pass-text); border-left: 3px solid var(--easy); }
 .verdict.fail { background: var(--fail-bg); color: var(--fail-text); border-left: 3px solid var(--hard); }

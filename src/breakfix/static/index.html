@@ -79,6 +79,18 @@
       <button id="next-hint"></button>
       <p id="man" class="muted small" hidden></p>
 
+      <details id="tutor" class="card" hidden>
+        <summary>Chiedi al tutor</summary>
+        <p class="muted small">Ti aiuta a ragionare, non ti dà la soluzione: vede i comandi che hai lanciato nel
+          terminale e quanti indizi hai aperto. Con il modello locale una risposta può richiedere mezzo minuto.</p>
+        <div id="tutor-log" class="tutor-log" aria-live="polite"></div>
+        <form id="tutor-form" class="tutor-form">
+          <textarea id="tutor-question" rows="2" maxlength="1000" required
+            placeholder="Es. run.sh ha la x per tutti eppure dice Permission denied"></textarea>
+          <button id="tutor-send" class="primary">Chiedi</button>
+        </form>
+      </details>
+
       <div class="actions">
         <button id="check" class="primary">Verifica</button>
         <a id="next" class="button" hidden></a>

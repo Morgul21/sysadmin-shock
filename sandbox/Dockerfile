@@ -28,4 +28,8 @@ RUN mkdir /srv/app/data \
     && chown root:app /var/log/app/app.log \
     && chmod 664 /var/log/app/app.log
 
+# La history di bash scritta dopo ogni comando, non all'uscita: il tutor legge gli ultimi comandi
+# per capire a che punto è chi si esercita (e non ripetergli quello che ha già fatto).
+RUN echo "PROMPT_COMMAND='history -a'" >> /root/.bashrc
+
 CMD ["sleep", "infinity"]

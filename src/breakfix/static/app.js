@@ -250,6 +250,8 @@ function render(view) {
   if (isTicket) renderTicket(view);
   else renderExercise(view);
   renderHints();
+  $("tutor").hidden = !isTicket;
+  if (isTicket) loadTutor();
   $("work").hidden = false;
   // L'indirizzo segue quello che è attivo (es. il primo esercizio scelto in automatico).
   const hash = isTicket ? `#/challenge/${view.number}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
@@ -313,6 +315,50 @@ function renderHints() {
   $("next-hint").textContent = `Mostra indizio ${hintsShown + 1}/${hints.length}`;
   $("man").hidden = !done;
   $("man").textContent = `Man page utili: ${man.join(", ")}`;
+}
+
+// --- Tutor: solo nei ticket. La conversazione la tiene il server, per sandbox: con un ticket nuovo riparte.
+
+function tutorEntry({ question, answer, blocked }) {
+  // Se il guardrail ha bloccato la risposta del modello, la pagina lo dice: è parte della demo.
+  const note = blocked ? '<span class="tutor-note">Il guardrail ha fermato una risposta con la soluzione.</span>' : "";
+  return `<p class="tutor-question">${escape(question)}</p>` +
+    `<p class="tutor-answer${blocked ? " blocked" : ""}">${note}${withCode(answer)}</p>`;
+}
+
+async function loadTutor() {
+  $("tutor-log").innerHTML = "";
+  try {
+    const transcript = await api("/api/tutor");
+    $("tutor-log").innerHTML = transcript.map(tutorEntry).join("");
+    $("tutor").open = transcript.length > 0;
+  } catch {
+    // senza conversazione il riquadro resta vuoto: la domanda dirà se il tutor non è raggiungibile
+  }
+}
+
+async function askTutor(event) {
+  event.preventDefault();
+  const question = $("tutor-question").value.trim();
+  if (!question) return;
+  $("tutor-send").disabled = true;
+  $("tutor-send").textContent = "Il tutor sta pensando…";
+  const pending = document.createElement("p");
+  pending.className = "tutor-question";
+  pending.textContent = question;
+  $("tutor-log").append(pending);
+  try {
+    const entry = await api("/api/tutor", "POST", { question, hints_shown: hintsShown });
+    pending.remove();
+    $("tutor-log").insertAdjacentHTML("beforeend", tutorEntry(entry));
+    $("tutor-question").value = "";
+  } catch (error) {
+    pending.remove();
+    showError(error.message);
+  } finally {
+    $("tutor-send").disabled = false;
+    $("tutor-send").textContent = "Chiedi";
+  }
 }
 
 function showLink(id, text, href) {
@@ -443,6 +489,11 @@ $("next-hint").onclick = () => {
   renderHints();
 };
 $("reconnect").onclick = connect;
+$("tutor-form").onsubmit = askTutor;
+// Invio manda la domanda, Maiusc+Invio va a capo.
+$("tutor-question").onkeydown = (event) => {
+  if (event.key === "Enter" && !event.shiftKey) $("tutor-form").requestSubmit();
+};
 $("exercise-view").onclick = (event) => {
   const button = event.target.closest("button[data-command]");
   if (button) runInTerminal(button.dataset.command);

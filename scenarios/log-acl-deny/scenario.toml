@@ -11,6 +11,13 @@ hints = [
     "Una ACL per l'utente app gli concede solo la lettura, e vale più dei permessi del gruppo. Va tolta quella regola: il log deve restare root:app, cambiare il proprietario non è la correzione giusta.",
 ]
 
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\bsetfacl\s[^\n]{0,80}app\.log',
+]
+
 [ticket]
 from = "Sara (sviluppo)"
 subject = "L'app non scrive più il log"

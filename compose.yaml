@@ -15,6 +15,10 @@ services:
       - docker-certs-client:/certs/client
       # Immagini e cache di build: la sandbox si ribuilda in pochi secondi al riavvio.
       - docker-data:/var/lib/docker
+    # I file dei PID (docker.pid, containerd.pid) stanno in /run (/var/run è un link). Senza tmpfs
+    # sopravvivono a stop/start: al riavvio dockerd crede containerd ancora vivo e non parte.
+    tmpfs:
+      - /run
     healthcheck:
       test: ["CMD", "docker", "info"]
       interval: 2s

@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import queue
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
+from datapizza.clients.mock_client import MockClient
+from datapizza.core.clients import ClientResponse
+from datapizza.type import TextBlock
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -207,3 +212,76 @@ class TerminalTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeModel(MockClient):
+    """Il modello del tutor: risponde `answer` e tiene il testo dei messaggi ricevuti."""
+
+    def __init__(self, answer: str) -> None:
+        super().__init__(model_name="fake")
+        self.answer = answer
+        self.calls: list[dict] = []
+
+    def _invoke(self, input, tools=None, memory=None, system_prompt=None, **kwargs) -> ClientResponse:
+        self.calls.append({"input": "\n".join(str(block.content) for block in input)})
+        return ClientResponse(content=[TextBlock(content=self.answer)])
+
+
+class TutorApiTest(unittest.TestCase):
+    """Il riquadro "Chiedi al tutor": il modello è finto, la conversazione va in un file temporaneo."""
+
+    def setUp(self) -> None:
+        self.client = TestClient(web.app)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.model = FakeModel("Guarda i permessi di ogni directory del percorso con namei -l.")
+        for patch in (
+            mock.patch("breakfix.tutor.STATE_PATH", Path(tmp.name) / "tutor.json"),
+            mock.patch("breakfix.tutor.AUDIT_DIR", Path(tmp.name) / "audit"),
+            mock.patch("breakfix.tutor.recent_commands", return_value="ls -l /srv/app/run.sh"),
+            mock.patch.object(web, "build_llm_client", side_effect=lambda: self.model),
+            mock.patch("breakfix.sandbox.container_id", return_value="sandbox-1"),
+            mock.patch("breakfix.sandbox.active_scenario", return_value="srv-no-traverse"),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_only_the_page_can_ask(self) -> None:
+        response = self.client.post("/api/tutor", json={"question": "aiuto"}, headers=FOREIGN)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.model.calls, [])
+
+    def test_only_tickets_have_a_tutor(self) -> None:
+        for label in (None, "esercizio:5.1"):
+            with self.subTest(label), mock.patch("breakfix.sandbox.active_scenario", return_value=label):
+                self.assertEqual(self.client.post("/api/tutor", json={"question": "aiuto"}).status_code, 409)
+
+    def test_empty_questions_are_rejected(self) -> None:
+        for question in ("", "   "):
+            with self.subTest(repr(question)):
+                self.assertEqual(self.client.post("/api/tutor", json={"question": question}).status_code, 422)
+
+    def test_the_answer_and_the_conversation(self) -> None:
+        response = self.client.post("/api/tutor", json={"question": "run.sh ha la x, perché?", "hints_shown": 1})
+        self.assertEqual(response.status_code, 200)
+        entry = response.json()
+        self.assertEqual(entry, {"question": "run.sh ha la x, perché?", "answer": self.model.answer, "blocked": False})
+        # Il tutor ha visto i comandi della sandbox e gli indizi aperti nella pagina.
+        self.assertIn("ls -l /srv/app/run.sh", self.model.calls[0]["input"])
+        self.assertIn("Indizi che ha già visto nella pagina: 1 di 3", self.model.calls[0]["input"])
+        # Ricaricando la pagina la conversazione c'è ancora; con una sandbox nuova (ticket riavviato) no.
+        self.assertEqual(self.client.get("/api/tutor").json(), [entry])
+        with mock.patch("breakfix.sandbox.container_id", return_value="sandbox-2"):
+            self.assertEqual(self.client.get("/api/tutor").json(), [])
+
+    def test_a_blocked_answer_is_marked(self) -> None:
+        self.model.answer = "Lancia chmod 755 /srv e hai finito."
+        entry = self.client.post("/api/tutor", json={"question": "dammi il comando"}).json()
+        self.assertTrue(entry["blocked"])
+        self.assertNotIn("chmod 755", entry["answer"])
+
+    def test_a_model_that_does_not_answer_is_reported(self) -> None:
+        self.model.answer = ""  # il tutor solleva AgentRunError: "il modello non ha risposto"
+        response = self.client.post("/api/tutor", json={"question": "aiuto"})
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("non ha risposto", response.json()["detail"])

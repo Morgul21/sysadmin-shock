@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 import docker
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -37,7 +38,8 @@ from starlette.datastructures import Headers
 
 from pydantic import BaseModel, Field
 
-from breakfix import lessons, sandbox
+from breakfix import lessons, sandbox, tutor
+from breakfix.agent import AgentRunError, build_llm_client
 from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
 from breakfix.lessons import Exercise, LessonLab
 
@@ -144,6 +146,12 @@ class CheckRequest(BaseModel):
     answer: str | None = Field(default=None, max_length=lessons.MAX_ANSWER_CHARS)
 
 
+class TutorRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=tutor.MAX_QUESTION_CHARS)
+    # Gli indizi già aperti nella pagina: il tutor non va oltre il prossimo.
+    hints_shown: int = Field(default=0, ge=0, le=20)
+
+
 def same_origin(headers: Headers) -> bool:
     # Senza Origin è un client non browser (curl, i test): solo i browser possono essere ingannati.
     origin = headers.get("origin")
@@ -247,6 +255,38 @@ async def check(request: CheckRequest | None = None) -> dict[str, Any]:
     return {"passed": result.passed, "output": result.output}
 
 
+@app.get("/api/tutor")
+async def tutor_conversation() -> list[dict[str, Any]]:
+    """La conversazione con il tutor sulla sandbox attiva (vuota con un ticket nuovo)."""
+    container = await asyncio.to_thread(sandbox.container_id)
+    return tutor.load_conversation(container).transcript
+
+
+@app.post("/api/tutor", dependencies=[Depends(require_same_origin)])
+async def ask_tutor(request: TutorRequest) -> dict[str, Any]:
+    # Solo i ticket: negli esercizi delle basi la risposta va trovata sul sistema, non chiesta.
+    scenario = await asyncio.to_thread(_active)
+    if scenario is None:
+        raise HTTPException(409, "il tutor segue i ticket: avviane uno dalle Challenge")
+    container = await asyncio.to_thread(sandbox.container_id)
+    conversation = tutor.load_conversation(container)
+    commands = await asyncio.to_thread(tutor.recent_commands)
+    try:
+        client = build_llm_client()
+    except SystemExit as exc:  # build_llm_client è pensata per la CLI: esce con il messaggio
+        raise HTTPException(503, f"tutor non configurato: {exc.code}") from exc
+    try:
+        reply = await tutor.ask(scenario, request.question, client, conversation.memory,
+                                commands=commands, hints_shown=request.hints_shown)
+    except ValueError as exc:  # domanda fatta solo di spazi
+        raise HTTPException(422, str(exc)) from exc
+    except AgentRunError as exc:
+        raise HTTPException(503, f"il tutor non ha risposto ({exc}). È avviato Ollama, o c'è la API key?") from exc
+    conversation.add(request.question, reply)
+    tutor.save_conversation(conversation)
+    return conversation.transcript[-1]
+
+
 @app.websocket("/ws/terminal")
 async def terminal(ws: WebSocket, cols: int = 80, rows: int = 24) -> None:
     """Dal browser arrivano messaggi JSON ({"input": testo} o {"resize": [colonne, righe]}),
@@ -289,6 +329,7 @@ async def terminal(ws: WebSocket, cols: int = 80, rows: int = 24) -> None:
 def main() -> None:
     import uvicorn
 
+    load_dotenv()  # provider e modello del tutor
     parser = argparse.ArgumentParser(prog="breakfix-ui", description="La UI dell'esercizio nel browser")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true", help="non aprire il browser")

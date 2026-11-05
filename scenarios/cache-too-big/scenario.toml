@@ -11,6 +11,14 @@ hints = [
     "La cache chiede 512 MB ma il container ne ha 256 in tutto: va riportata a un valore che ci stia, con margine per il resto.",
 ]
 
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\bsed\s[^\n]{0,80}CACHE_MB',
+    'CACHE_MB\s*=\s*(?!512\b)\d+',
+]
+
 [ticket]
 from = "Andrea (IT)"
 subject = "Memoria insufficiente dopo il tuning"

@@ -75,9 +75,12 @@ def generation_kwargs() -> dict:
     return kwargs
 
 
-def build_llm_client():
-    provider = os.getenv("LLM_PROVIDER", "openai").lower()
-    model = os.getenv("LLM_MODEL") or DEFAULT_MODELS.get(provider)
+def build_llm_client(provider: str | None = None, model: str | None = None):
+    """Il client del modello: da LLM_PROVIDER / LLM_MODEL, oppure da argomenti (es. il giudice degli eval)."""
+    if provider is None:
+        provider, model = os.getenv("LLM_PROVIDER", "openai"), model or os.getenv("LLM_MODEL")
+    provider = provider.lower()
+    model = model or DEFAULT_MODELS.get(provider)
     if not model:
         sys.exit(f"Imposta LLM_MODEL per il provider {provider!r}")
     temperature = os.getenv("LLM_TEMPERATURE")

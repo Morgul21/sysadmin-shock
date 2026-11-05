@@ -1,7 +1,8 @@
 """Il laboratorio: gli scenari e la CLI `breakfix-sandbox` per usarli.
 
 Uno scenario è una cartella in scenarios/ con:
-- scenario.toml: titolo, categoria, difficoltà, il ticket dell'utente, gli indizi e le man page (per il tutor);
+- scenario.toml: titolo, categoria, difficoltà, il ticket dell'utente, gli indizi, le man page e le
+  regole anti-spoiler del tutor;
 - break.sh: rompe la sandbox sana;
 - check.sh: pass/fail, preceduto dalle funzioni di scenarios/_lib.sh;
 - fix.sh: la riparazione di riferimento (deve passare il guardrail, come quella del fixer).
@@ -74,6 +75,8 @@ class Scenario:
     path: Path
     # Le lezioni delle basi che preparano a questo ticket (numeri della roadmap).
     lessons: tuple[int, ...] = ()
+    # Regex dei comandi che svelerebbero la correzione: il guardrail di output del tutor.
+    spoilers: tuple[str, ...] = ()
 
     @property
     def task(self) -> str:
@@ -124,6 +127,7 @@ def load_scenarios(directory: Path = SCENARIOS_DIR) -> list[Scenario]:
             man=tuple(meta.get("man", ())),
             path=toml_path.parent,
             lessons=tuple(meta.get("lessons", ())),
+            spoilers=tuple(meta.get("spoilers", ())),
         )
         if scenario.category not in CATEGORIES or scenario.difficulty not in DIFFICULTIES:
             raise ValueError(f"{scenario.id}: categoria o difficoltà non valida")

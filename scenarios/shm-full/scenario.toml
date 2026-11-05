@@ -11,6 +11,14 @@ hints = [
     "In `/dev/shm` c'è un file di export da circa 200 MB lasciato da un job: occupa RAM finché esiste.",
 ]
 
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\b(?:rm|unlink)\s+(?:-\S+\s+)*\S*(?:report-export|/dev/shm/)',
+    '\btruncate\s[^\n]{0,40}(?:report-export|/dev/shm/)',
+]
+
 [ticket]
 from = "Sara (sviluppo)"
 subject = "Memoria piena ma non si capisce da cosa"

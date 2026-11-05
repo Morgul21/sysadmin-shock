@@ -171,6 +171,14 @@ def active_scenario() -> str | None:
     return proc.stdout.strip() or None
 
 
+def container_id() -> str | None:
+    """Cambia a ogni avvio di scenario: il tutor la usa per ricominciare la conversazione."""
+    proc = subprocess.run(["docker", "inspect", "-f", "{{.Id}}", CONTAINER_NAME], capture_output=True, text=True)
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
 def shell() -> None:
     """Shell interattiva nella sandbox: è da qui che chi si esercita diagnostica e ripara."""
     result = _docker("exec", "-it", "--workdir", "/root", CONTAINER_NAME, "bash", "-l", check=False)
