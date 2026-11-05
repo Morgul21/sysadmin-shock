@@ -171,8 +171,9 @@ def index() -> FileResponse:
 
 @app.get("/api/scenarios")
 def scenarios() -> list[dict[str, Any]]:
-    # Come `breakfix-sandbox list`: numero, categoria, difficoltà, oggetto.
-    return [{"number": number, "subject": s.ticket.subject, "category": s.category, "difficulty": s.difficulty}
+    # Come `breakfix-sandbox list`: numero, categoria, difficoltà, oggetto; più le lezioni che preparano.
+    return [{"number": number, "subject": s.ticket.subject, "category": s.category, "difficulty": s.difficulty,
+             "lessons": list(s.lessons)}
             for number, s in enumerate(load_scenarios(), start=1)]
 
 
@@ -180,7 +181,7 @@ def scenarios() -> list[dict[str, Any]]:
 def lesson_list() -> list[dict[str, Any]]:
     # Come `breakfix-sandbox lessons`: la roadmap delle basi, con i ticket a cui prepara ogni lezione.
     return [{"number": lesson.number, "title": lesson.title, "track": lesson.track,
-             "tickets": tickets_for(lesson),
+             "man": list(lesson.man), "tickets": tickets_for(lesson),
              "exercises": [{"key": e.key, "title": e.title, "type": e.kind} for e in lesson.exercises]}
             for lesson in lessons.load_lessons()]
 

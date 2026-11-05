@@ -13,6 +13,16 @@
   --hint-bg: #eef4ff;
   --code-bg: #eef0f3;
   --term-bg: #15181c;
+  /* Difficoltà dei ticket: bordo, sfondo, testo */
+  --easy: #2f9e55;
+  --easy-bg: #e9f6ee;
+  --easy-text: #1e6b34;
+  --medium: #d29a1a;
+  --medium-bg: #fdf4df;
+  --medium-text: #7a5600;
+  --hard: #d1453b;
+  --hard-bg: #fdecea;
+  --hard-text: #a3221f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -29,6 +39,15 @@
     --fail-text: #f19a97;
     --hint-bg: #16233a;
     --code-bg: #232830;
+    --easy: #4cbb72;
+    --easy-bg: #13281b;
+    --easy-text: #8fdcaa;
+    --medium: #e0b040;
+    --medium-bg: #2e2510;
+    --medium-text: #f0cd7a;
+    --hard: #e8665c;
+    --hard-bg: #351716;
+    --hard-text: #f4a29b;
   }
 }
 
@@ -57,39 +76,26 @@ header {
 
 h1 { font-size: 18px; margin: 0 12px 0 0; }
 h2 { font-size: 18px; margin: 0; }
+h3 { font-size: 16px; margin: 0; }
+a { color: var(--accent); }
 
 .tabs { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; }
-.tabs button { border: 0; background: transparent; padding: 4px 14px; }
-.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+.tabs a { padding: 4px 14px; border-radius: 6px; color: var(--text); text-decoration: none; }
+.tabs a[aria-current="page"] { background: var(--accent); color: var(--accent-text); }
 
-.picker { display: flex; align-items: center; gap: 8px; flex: 1 1 320px; max-width: 560px; }
-.picker select { flex: 1; min-width: 0; }
-
-select, button {
+button, a.button {
   font: inherit;
   padding: 6px 12px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
 }
 
-button { cursor: pointer; }
 button:disabled { opacity: .6; cursor: progress; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-
-main {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(320px, 2fr) 3fr;
-  gap: 16px;
-  padding: 16px;
-}
-
-#exercise { overflow-y: auto; padding-right: 4px; }
-#exercise > * + * { margin-top: 12px; }
-#active > * + * { margin-top: 12px; }
 
 .card {
   background: var(--surface);
@@ -115,8 +121,84 @@ code {
   font: 13px ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
+/* --- Le mappe: box collegate da frecce, raggruppate per percorso o difficoltà --- */
+
+#map-page { flex: 1; overflow-y: auto; padding: 16px; }
+#map-page > * + * { margin-top: 16px; }
+#map-intro { max-width: 900px; margin: 0; }
+
+.track > h2 { margin-bottom: 10px; }
+.track + .track { margin-top: 28px; }
+.track.facile > h2 { color: var(--easy-text); }
+.track.media > h2 { color: var(--medium-text); }
+.track.difficile > h2 { color: var(--hard-text); }
+
+.path { display: flex; flex-wrap: wrap; gap: 12px 0; align-items: stretch; }
+.node { display: flex; align-items: center; }
+.arrow { padding: 0 10px; color: var(--muted); font-size: 20px; }
+
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 230px;
+  min-height: 150px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  transition: transform .1s, box-shadow .1s;
+}
+
+.box:hover, .box:focus-visible { transform: translateY(-2px); box-shadow: 0 4px 12px rgb(0 0 0 / .12); }
+.box:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.box.complete { border-left-color: var(--easy); }
+.box-number { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.box-title { font-weight: 600; flex: 1; }
+.box-commands { display: flex; flex-wrap: wrap; gap: 4px; }
+.box-prepare { font-size: 13px; color: var(--muted); }
+
+.marks { display: flex; gap: 4px; }
+.mark { width: 18px; height: 4px; border-radius: 2px; background: var(--border); }
+.mark.done { background: var(--easy); }
+
+.box.ticket.facile { border-left-color: var(--easy); background: var(--easy-bg); }
+.box.ticket.media { border-left-color: var(--medium); background: var(--medium-bg); }
+.box.ticket.difficile { border-left-color: var(--hard); background: var(--hard-bg); }
+
+.badge { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; border: 1px solid; }
+.badge.facile { color: var(--easy-text); border-color: var(--easy); }
+.badge.media { color: var(--medium-text); border-color: var(--medium); }
+.badge.difficile { color: var(--hard-text); border-color: var(--hard); }
+
+/* --- La pagina di lavoro: esercizio o ticket a sinistra, terminale a destra --- */
+
+#work-page {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(320px, 2fr) 3fr;
+  gap: 16px;
+  padding: 16px;
+}
+
+#exercise { overflow-y: auto; padding-right: 4px; }
+#exercise > * + *, #work > * + * { margin-top: 12px; }
 #ticket-view > * + *, #exercise-view > * + * { margin-top: 12px; }
-h3 { font-size: 16px; margin: 0; }
+.back { display: inline-block; text-decoration: none; }
+
+/* Il selettore degli esercizi: un trattino per esercizio */
+.stepper { display: flex; gap: 10px; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--muted); text-decoration: none; font-size: 12px; }
+.step .dash { width: 44px; height: 6px; border-radius: 3px; background: var(--border); }
+.step:hover .dash { background: var(--muted); }
+.step.done .dash { background: var(--easy); }
+.step.active { color: var(--text); font-weight: 600; }
+.step.active .dash { background: var(--accent); height: 8px; }
+.step.active.done .dash { background: var(--easy); box-shadow: 0 0 0 2px var(--accent); }
 
 /* Spiegazioni delle lezioni e testi degli esercizi */
 .prose h3 { margin: 16px 0 6px; }
@@ -138,7 +220,6 @@ h3 { font-size: 16px; margin: 0; }
   color: var(--text);
 }
 
-button.link { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .steps { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
@@ -188,6 +269,11 @@ pre {
 
 @media (max-width: 860px) {
   body { height: auto; }
-  main { grid-template-columns: 1fr; }
+  #work-page { grid-template-columns: 1fr; }
   #console { height: 70vh; }
+  /* Su schermi stretti il percorso va in verticale */
+  .path { flex-direction: column; }
+  .node { flex-direction: column; align-items: stretch; }
+  .arrow { transform: rotate(90deg); text-align: center; padding: 6px 0; }
+  .box { width: 100%; min-height: 0; }
 }

@@ -107,6 +107,10 @@ class ApiTest(unittest.TestCase):
         self.assertEqual([e["key"] for e in listing[5]["exercises"]], ["5.1", "5.2", "5.3"])
         self.assertIn(ticket, listing[5]["tickets"])
         self.assertEqual(listing[6]["exercises"][0]["type"], "stato")
+        # Le box della mappa: i comandi della lezione e, per ogni ticket, le lezioni che preparano.
+        self.assertIn("ls(1)", listing[5]["man"])
+        tickets = {t["number"]: t for t in self.client.get("/api/scenarios").json()}
+        self.assertEqual(tickets[ticket]["lessons"], [5, 6])
 
     def test_the_ticket_points_to_its_lessons(self) -> None:
         with self._active("run-sh-noexec"):

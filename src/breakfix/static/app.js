@@ -1,4 +1,7 @@
-// La pagina: esercizi delle basi e ticket da /api, terminale vero da /ws/terminal.
+// La pagina: le mappe delle basi e delle challenge (box collegate), e la pagina di lavoro con il
+// terminale. Gli indirizzi stanno nel frammento: #/basi, #/basi/5/2 (lezione 5, esercizio 2),
+// #/challenge, #/challenge/3. Ricaricando si resta dove si era, e la sandbox riparte solo se
+// l'esercizio o il ticket chiesto non è già quello attivo.
 
 // Il metodo di un sistemista, uguale per tutti i ticket: non dice la causa, dice da dove partire.
 const FIRST_STEPS = [
@@ -10,20 +13,23 @@ const FIRST_STEPS = [
   ["Limite di memoria del container", "cat /sys/fs/cgroup/memory.max"],
 ];
 
-const EMPTY = {
-  basi: "Le <b>basi</b>: lezioni brevi, ognuna con esercizi verificati, che preparano ai ticket. " +
-    "Scegli un esercizio in alto e premi <b>Avvia</b>: la sandbox riparte sana e l'esercizio la prepara.",
-  ticket: "Scegli un ticket in alto e premi <b>Avvia</b>: la sandbox riparte sana e viene rotta come " +
-    "racconta il ticket.",
+const TRACKS = { orientarsi: "Orientarsi", permessi: "Permessi", "processi e memoria": "Processi e memoria" };
+const LEVELS = { facile: "Facili", media: "Medie", difficile: "Difficili" };
+
+const INTRO = {
+  basi: "Lezioni brevi, una per gruppo di comandi, ognuna con esercizi verificati: si seguono in ordine, " +
+    "ma puoi aprire qualunque lezione. Aprendo una lezione la sandbox riparte da capo e si prepara per l'esercizio.",
+  challenge: "Ticket veri, da risolvere senza che nessuno ti dica dove guardare. Il colore dice la difficoltà; " +
+    "sotto, le lezioni delle basi che preparano. Aprendo un ticket la sandbox riparte da capo e viene rotta come racconta il ticket.",
 };
 
 const $ = (id) => document.getElementById(id);
-let tickets = [];
 let lessons = [];
-let current = null; // quello che è in corso nella sandbox: un ticket o un esercizio
-let tab = "basi";
+let tickets = [];
+let current = null; // quello che è attivo nella sandbox: un ticket o un esercizio
 let hintsShown = 0;
 let socket = null;
+let busy = false;
 
 // --- API -------------------------------------------------------------------------
 
@@ -37,6 +43,31 @@ async function api(path, method = "GET", body = undefined) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.detail || response.statusText);
   return data;
+}
+
+// --- Progresso: nel browser, per chi usa questa macchina ----------------------------
+
+const PROGRESS_KEY = "breakfix.progress";
+
+function loadProgress() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {};
+    return { exercises: saved.exercises || [], tickets: saved.tickets || [] };
+  } catch {
+    return { exercises: [], tickets: [] };
+  }
+}
+
+const progress = loadProgress();
+const isDone = (kind, id) => progress[kind].includes(id);
+
+function markDone(kind, id) {
+  if (!isDone(kind, id)) progress[kind].push(id);
+  try {
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
+  } catch {
+    // senza storage il progresso vale solo fino al prossimo caricamento
+  }
 }
 
 // --- Testo -------------------------------------------------------------------------
@@ -97,62 +128,169 @@ function markdown(text) {
 }
 
 function showError(message) {
-  $("error").textContent = message;
-  $("error").hidden = !message;
-}
-
-// --- Schede e scelta -----------------------------------------------------------------
-
-function fillPicker() {
-  $("picker-label").textContent = tab === "basi" ? "Esercizio" : "Ticket";
-  $("picker").innerHTML = tab === "basi"
-    ? lessons.map((l) => `<optgroup label="${attr(`${l.number}. ${l.title} (${l.track})`)}">` +
-      l.exercises.map((e) => `<option value="${e.key}">${e.key} ${escape(e.title)}</option>`).join("") +
-      "</optgroup>").join("")
-    : tickets.map((s) =>
-      `<option value="${s.number}">${s.number}. ${escape(s.subject)} (${s.category}, ${s.difficulty})</option>`).join("");
-}
-
-// La scheda decide cosa si sceglie in alto; a sinistra si vede quello che è in corso, se è di quella scheda.
-function setTab(name, selected = null) {
-  tab = name;
-  for (const button of document.querySelectorAll(".tabs button")) {
-    button.setAttribute("aria-selected", String(button.dataset.tab === tab));
+  for (const id of ["error", "map-error"]) {
+    $(id).textContent = message;
+    $(id).hidden = !message;
   }
-  fillPicker();
-  if (selected) $("picker").value = selected;
-  const visible = Boolean(current) && (current.kind === "ticket") === (tab === "ticket");
-  $("active").hidden = !visible;
-  $("empty").hidden = visible;
-  const running = current ? (current.kind === "ticket" ? "un ticket" : "un esercizio") : "";
-  $("empty").innerHTML = EMPTY[tab] +
-    (current && !visible ? `<br><br>Nella sandbox c'è ${running} in corso: <b>Avvia</b> lo chiude e riparte da capo.` : "");
 }
 
-// --- Ticket ed esercizi ----------------------------------------------------------------
+// --- Le mappe: box collegate -----------------------------------------------------------
+
+const arrow = '<span class="arrow" aria-hidden="true">→</span>';
+
+function lessonBox(lesson, first) {
+  // I comandi della lezione sono le sue man page di sezione 1 (comandi utente) e 8 (amministrazione).
+  const commands = lesson.man.filter((m) => /\((1p?|8)\)$/.test(m)).map((m) => m.replace(/\(.*\)$/, ""));
+  const marks = lesson.exercises
+    .map((e) => `<span class="mark${isDone("exercises", e.key) ? " done" : ""}"></span>`).join("");
+  const doneCount = lesson.exercises.filter((e) => isDone("exercises", e.key)).length;
+  const complete = doneCount === lesson.exercises.length;
+  return `<div class="node">${first ? "" : arrow}
+    <a class="box${complete ? " complete" : ""}" href="#/basi/${lesson.number}">
+      <span class="box-number">Lezione ${lesson.number}${complete ? " · completata" : ""}</span>
+      <span class="box-title">${escape(lesson.title)}</span>
+      <span class="box-commands">${commands.map((c) => `<code>${escape(c)}</code>`).join(" ")}</span>
+      <span class="marks" title="${doneCount} esercizi su ${lesson.exercises.length}">${marks}</span>
+    </a></div>`;
+}
+
+function ticketBox(ticket, first) {
+  const done = isDone("tickets", ticket.number);
+  const prepare = ticket.lessons.length
+    ? `<span class="box-prepare">Preparati con: lezion${ticket.lessons.length > 1 ? "i" : "e"} ${ticket.lessons.join(", ")}</span>` : "";
+  return `<div class="node">${first ? "" : arrow}
+    <a class="box ticket ${ticket.difficulty}" href="#/challenge/${ticket.number}">
+      <span class="box-number">Ticket ${ticket.number}${done ? " · risolto" : ""}</span>
+      <span class="box-title">${escape(ticket.subject)}</span>
+      <span><span class="badge ${ticket.difficulty}">${ticket.difficulty}</span>
+        <span class="muted small">${escape(ticket.category)}</span></span>
+      ${prepare}
+    </a></div>`;
+}
+
+function section(title, boxes, className = "") {
+  return boxes.length ? `<section class="track ${className}"><h2>${title}</h2><div class="path">${boxes.join("")}</div></section>` : "";
+}
+
+function showMap(kind) {
+  $("work-page").hidden = true;
+  $("map-page").hidden = false;
+  $("map-intro").textContent = INTRO[kind];
+  $("map").innerHTML = kind === "basi"
+    ? Object.entries(TRACKS).map(([track, name]) =>
+      section(name, lessons.filter((l) => l.track === track).map((l, i) => lessonBox(l, i === 0)))).join("")
+    : Object.entries(LEVELS).map(([level, name]) =>
+      section(name, tickets.filter((t) => t.difficulty === level).map((t, i) => ticketBox(t, i === 0)), level)).join("");
+}
+
+// --- La pagina di lavoro ------------------------------------------------------------
+
+function showWork() {
+  $("map-page").hidden = true;
+  $("work-page").hidden = false;
+  requestAnimationFrame(() => fit.fit()); // il terminale era nascosto: va ridimensionato ora
+}
+
+async function start(path) {
+  if (busy) return;
+  busy = true;
+  showError("");
+  showWork();
+  $("work").hidden = true;
+  $("loading").hidden = false;
+  try {
+    render(await api(path, "POST"));
+    connect(); // il container è nuovo: la vecchia shell non esiste più
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    busy = false;
+    $("loading").hidden = true;
+  }
+}
+
+async function openLesson(number, step) {
+  const lesson = lessons.find((l) => l.number === number);
+  if (!lesson) return void (location.hash = "#/basi");
+  const key = step ? `${number}.${step}` : null;
+  setBack("basi");
+  if (current?.kind === "esercizio" && current.lesson.number === number && (!key || key === current.key)) {
+    render(current);
+    return;
+  }
+  // Senza un esercizio indicato, il primo non ancora superato.
+  const target = key || (lesson.exercises.find((e) => !isDone("exercises", e.key)) || lesson.exercises[0]).key;
+  await start(`/api/learn/${target}`);
+}
+
+async function openTicket(number) {
+  if (!tickets.some((t) => t.number === number)) return void (location.hash = "#/challenge");
+  setBack("challenge");
+  if (current?.kind === "ticket" && current.number === number) {
+    render(current);
+    return;
+  }
+  await start(`/api/start/${number}`);
+}
+
+function setBack(kind) {
+  $("back").href = `#/${kind}`;
+  $("back").textContent = kind === "basi" ? "← Basi" : "← Challenge";
+}
 
 function render(view) {
   current = view;
   hintsShown = 0;
   $("verdict").hidden = true;
   $("next").hidden = true;
-  if (!view) {
-    setTab(tab);
-    return;
-  }
+  $("next-ticket").hidden = true;
   const isTicket = view.kind === "ticket";
-  $("ticket-view").hidden = !isTicket;
   $("exercise-view").hidden = isTicket;
+  $("ticket-view").hidden = !isTicket;
   if (isTicket) renderTicket(view);
   else renderExercise(view);
-  setTab(isTicket ? "ticket" : "basi", isTicket ? String(view.number) : view.key);
   renderHints();
+  $("work").hidden = false;
+  // L'indirizzo segue quello che è attivo (es. il primo esercizio scelto in automatico).
+  const hash = isTicket ? `#/challenge/${view.number}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
+  if (location.hash !== hash) history.replaceState(null, "", hash);
+  setTab(isTicket ? "challenge" : "basi");
+  showWork();
+}
+
+function renderExercise(view) {
+  const lesson = view.lesson;
+  const entry = lessons.find((l) => l.number === lesson.number);
+  $("lesson-heading").textContent = `Lezione ${lesson.number} · ${lesson.title}`;
+  const prepares = lesson.tickets.length
+    ? ` · prepara ${lesson.tickets.length > 1 ? "ai ticket" : "al ticket"} ${lesson.tickets.join(", ")}` : "";
+  $("lesson-meta").textContent = `${TRACKS[lesson.track] || lesson.track}${prepares}`;
+  $("lesson-text").innerHTML = markdown(lesson.explanation);
+  // Aperta finché non hai superato nessun esercizio della lezione.
+  $("lesson-explanation").open = !entry.exercises.some((e) => isDone("exercises", e.key));
+  renderStepper(entry, view.key);
+  $("exercise-number").textContent = `Esercizio ${view.key} · ` +
+    (view.type === "risposta" ? "trova la risposta sul sistema" : "cambia il sistema, poi verifica");
+  $("exercise-title").textContent = view.title;
+  $("exercise-task").innerHTML = markdown(view.task);
+  $("answer-row").hidden = view.type !== "risposta";
+  $("answer").value = "";
+}
+
+// Il selettore: un trattino per esercizio. Un clic cambia l'indirizzo, e il router avvia l'esercizio.
+function renderStepper(lesson, activeKey) {
+  $("stepper").innerHTML = lesson.exercises.map((e, i) => {
+    const state = (e.key === activeKey ? " active" : "") + (isDone("exercises", e.key) ? " done" : "");
+    return `<a class="step${state}" href="#/basi/${lesson.number}/${i + 1}" title="${attr(`${e.key} ${e.title}`)}"` +
+      `${e.key === activeKey ? ' aria-current="step"' : ""}><span class="dash"></span><span>${e.key}</span></a>`;
+  }).join("");
 }
 
 function renderTicket(view) {
   const t = view.ticket;
   $("ticket-number").textContent = `Ticket n. ${view.number}`;
-  $("ticket-meta").textContent = `${view.category} · ${view.difficulty}`;
+  $("ticket-meta").innerHTML = `<span class="badge ${view.difficulty}">${view.difficulty}</span> ` +
+    `<span class="muted">${escape(view.category)}</span>`;
   $("ticket-sender").textContent = t.sender;
   $("ticket-subject").textContent = t.subject;
   $("ticket-body").textContent = t.body;
@@ -161,24 +299,7 @@ function renderTicket(view) {
     `[Helpdesk] Utente con cui gira: ${escape(t.user)}`;
   $("ticket-lessons").hidden = !view.lessons.length;
   $("ticket-lessons").innerHTML = "Per prepararti, nelle basi: " + view.lessons
-    .map((l) => `<button class="link" data-lesson="${l.number}">lezione ${l.number}, ${escape(l.title)}</button>`)
-    .join(" · ");
-}
-
-function renderExercise(view) {
-  const lesson = view.lesson;
-  $("lesson-heading").textContent = `Lezione ${lesson.number} · ${lesson.title}`;
-  const prepares = lesson.tickets.length
-    ? ` · prepara ${lesson.tickets.length > 1 ? "ai ticket" : "al ticket"} ${lesson.tickets.join(", ")}` : "";
-  $("lesson-meta").textContent = `${lesson.track}${prepares}`;
-  $("lesson-text").innerHTML = markdown(lesson.explanation);
-  $("exercise-number").textContent =
-    `Esercizio ${view.key} (${view.key.split(".")[1]} di ${lesson.exercises}) · ` +
-    (view.type === "risposta" ? "trova la risposta sul sistema" : "cambia il sistema, poi verifica");
-  $("exercise-title").textContent = view.title;
-  $("exercise-task").innerHTML = markdown(view.task);
-  $("answer-row").hidden = view.type !== "risposta";
-  $("answer").value = "";
+    .map((l) => `<a href="#/basi/${l.number}">lezione ${l.number}, ${escape(l.title)}</a>`).join(" · ");
 }
 
 function renderHints() {
@@ -194,19 +315,55 @@ function renderHints() {
   $("man").textContent = `Man page utili: ${man.join(", ")}`;
 }
 
-// Dopo un esercizio riuscito: il successivo della lezione, o il ticket a cui la lezione prepara.
+function showLink(id, text, href) {
+  $(id).textContent = text;
+  $(id).href = href;
+  $(id).hidden = false;
+}
+
+// Dopo un esercizio riuscito: il successivo, o a fine lezione la lezione dopo e il ticket collegato.
 function offerNext() {
-  const lesson = current.lesson;
-  if (current.next) {
-    $("next").textContent = `Esercizio successivo (${current.next}) →`;
-    $("next").onclick = () => start("basi", current.next);
-  } else if (lesson.tickets.length) {
-    $("next").textContent = `Lezione finita: vai al ticket ${lesson.tickets[0]} →`;
-    $("next").onclick = () => setTab("ticket", String(lesson.tickets[0]));
-  } else {
+  if (current.kind === "ticket") {
+    const next = tickets.find((t) => t.number === current.number + 1);
+    if (next) showLink("next", `Ticket successivo (${next.number}) →`, `#/challenge/${next.number}`);
     return;
   }
-  $("next").hidden = false;
+  const lesson = current.lesson;
+  if (current.next) {
+    showLink("next", `Esercizio successivo (${current.next}) →`, `#/basi/${lesson.number}/${current.next.split(".")[1]}`);
+    return;
+  }
+  const following = lessons.find((l) => l.number > lesson.number);
+  if (following) showLink("next", `Lezione successiva (${following.number}) →`, `#/basi/${following.number}`);
+  if (lesson.tickets.length) {
+    showLink("next-ticket", `Prova il ticket ${lesson.tickets[0]} →`, `#/challenge/${lesson.tickets[0]}`);
+  }
+}
+
+async function check() {
+  $("check").disabled = true;
+  try {
+    const isExercise = current.kind === "esercizio";
+    const body = isExercise && current.type === "risposta" ? { answer: $("answer").value } : {};
+    const result = await api("/api/check", "POST", body);
+    $("verdict-status").className = `verdict ${result.passed ? "pass" : "fail"}`;
+    $("verdict-status").textContent = result.passed ? `PASS: ${isExercise ? "corretto" : "riparato"}` : "FAIL: non ancora";
+    $("verdict-output").textContent = result.output;
+    $("verdict").hidden = false;
+    if (result.passed) {
+      if (isExercise) {
+        markDone("exercises", current.key);
+        renderStepper(lessons.find((l) => l.number === current.lesson.number), current.key);
+      } else {
+        markDone("tickets", current.number);
+      }
+      offerNext();
+    }
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    $("check").disabled = false;
+  }
 }
 
 // --- Terminale ---------------------------------------------------------------------
@@ -220,7 +377,6 @@ const term = new Terminal({
 const fit = new FitAddon.FitAddon();
 term.loadAddon(fit);
 term.open($("terminal"));
-fit.fit();
 
 function send(message) {
   if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
@@ -244,53 +400,35 @@ function connect() {
 
 term.onData((data) => send({ input: data }));
 term.onResize(({ cols, rows }) => send({ resize: [cols, rows] }));
-new ResizeObserver(() => fit.fit()).observe($("terminal"));
+new ResizeObserver(() => { if (!$("work-page").hidden) fit.fit(); }).observe($("terminal"));
 
 function runInTerminal(command) {
   send({ input: command + "\r" });
   term.focus();
 }
 
+// --- Router ------------------------------------------------------------------------
+
+function setTab(name) {
+  for (const tab of document.querySelectorAll(".tabs a")) {
+    if (tab.dataset.tab === name) tab.setAttribute("aria-current", "page");
+    else tab.removeAttribute("aria-current");
+  }
+}
+
+function route() {
+  const [part, number, step] = location.hash.replace(/^#\/?/, "").split("/");
+  const kind = part === "challenge" ? "challenge" : "basi";
+  setTab(kind);
+  showError("");
+  if (!number) return showMap(kind);
+  return kind === "basi" ? openLesson(Number(number), step) : openTicket(Number(number));
+}
+
+window.addEventListener("hashchange", route);
+
 // --- Azioni ------------------------------------------------------------------------
 
-async function start(kind, value) {
-  $("start").disabled = true;
-  $("busy").hidden = false;
-  showError("");
-  try {
-    render(await api(kind === "basi" ? `/api/learn/${value}` : `/api/start/${value}`, "POST"));
-    connect(); // il container è nuovo: la vecchia shell non esiste più
-  } catch (error) {
-    showError(error.message);
-  } finally {
-    $("start").disabled = false;
-    $("busy").hidden = true;
-  }
-}
-
-async function check() {
-  $("check").disabled = true;
-  try {
-    const isExercise = current.kind === "esercizio";
-    const body = isExercise && current.type === "risposta" ? { answer: $("answer").value } : {};
-    const result = await api("/api/check", "POST", body);
-    const done = isExercise ? "corretto" : "riparato";
-    $("verdict-status").className = `verdict ${result.passed ? "pass" : "fail"}`;
-    $("verdict-status").textContent = result.passed ? `PASS: ${done}` : "FAIL: non ancora";
-    $("verdict-output").textContent = result.output;
-    $("verdict").hidden = false;
-    if (result.passed && isExercise) offerNext();
-  } catch (error) {
-    showError(error.message);
-  } finally {
-    $("check").disabled = false;
-  }
-}
-
-for (const button of document.querySelectorAll(".tabs button")) {
-  button.onclick = () => setTab(button.dataset.tab);
-}
-$("start").onclick = () => start(tab, $("picker").value);
 $("check").onclick = check;
 $("answer").onkeydown = (event) => { if (event.key === "Enter") check(); };
 $("next-hint").onclick = () => {
@@ -298,15 +436,9 @@ $("next-hint").onclick = () => {
   renderHints();
 };
 $("reconnect").onclick = connect;
-
-// I comandi da provare nelle spiegazioni, e i rimandi dai ticket alle lezioni.
 $("exercise-view").onclick = (event) => {
   const button = event.target.closest("button[data-command]");
   if (button) runInTerminal(button.dataset.command);
-};
-$("ticket-lessons").onclick = (event) => {
-  const button = event.target.closest("button[data-lesson]");
-  if (button) setTab("basi", `${button.dataset.lesson}.1`);
 };
 
 for (const [label, command] of FIRST_STEPS) {
@@ -321,12 +453,10 @@ for (const [label, command] of FIRST_STEPS) {
 
 (async () => {
   try {
-    [tickets, lessons] = await Promise.all([api("/api/scenarios"), api("/api/lessons")]);
-    const active = await api("/api/active");
-    render(active);
-    if (active) connect(); // pagina ricaricata con un ticket o un esercizio già avviato
-    else term.write("Avvia un esercizio o un ticket: qui si apre la shell di root sul server.\r\n");
+    [lessons, tickets, current] = await Promise.all([api("/api/lessons"), api("/api/scenarios"), api("/api/active")]);
+    if (current) connect(); // pagina ricaricata con un ticket o un esercizio già avviato
   } catch (error) {
     showError(`Server non raggiungibile: ${error.message}`);
   }
+  route();
 })();

@@ -109,11 +109,20 @@ breakfix-sandbox down
 ```
 
 **La UI** (`breakfix-ui`, FastAPI su http://127.0.0.1:8000) fa `lessons`, `learn`, `list`, `start`,
-`shell` e `check` dal browser, con due schede: **Basi** (vedi sotto) e **Ticket**. In alto si sceglie
-l'esercizio o il ticket e si preme *Avvia*; la sezione dell'esercizio mostra il
-ticket, *Come orientarsi* (i primi comandi di ogni ticket: un clic li esegue nel terminale), gli indizi
-graduali (uno per volta, a richiesta: dove guardare, come verificarlo, la causa; mai il comando del
-fix) e il pulsante *Verifica*. Accanto c'è un terminale vero ([xterm.js](https://xtermjs.org/), incluso
+`shell` e `check` dal browser, con due sezioni:
+- **Basi**: le lezioni come box collegate, per percorso, con i comandi e una barretta per esercizio
+  (verde se superato). Aprendo una lezione parte il primo esercizio non ancora superato; un selettore a
+  trattini passa da un esercizio all'altro (1.1, 1.2, …) e ognuno riparte da una sandbox nuova. Sopra
+  l'esercizio c'è la spiegazione della lezione, con i comandi da provare con un clic;
+- **Challenge**: i ticket come box, raggruppate e colorate per difficoltà (verde, giallo, rosso, sempre
+  con la scritta), con le lezioni che preparano. Sono sempre aperte, anche senza aver fatto le lezioni.
+  La pagina del ticket mostra il ticket, *Come orientarsi* (i primi comandi: un clic li esegue nel
+  terminale), gli indizi graduali (uno per volta: dove guardare, come verificarlo, la causa; mai il
+  comando del fix) e il pulsante *Verifica*.
+
+Ogni pagina ha il suo indirizzo (`#/basi/5/2`, `#/challenge/3`): ricaricando si resta lì, e la sandbox
+riparte solo se l'esercizio o il ticket non è già quello attivo. Il progresso (esercizi superati, ticket
+risolti) è salvato nel browser. Accanto all'esercizio c'è un terminale vero ([xterm.js](https://xtermjs.org/), incluso
 nel pacchetto, quindi funziona anche offline): una bash di root con TTY nella sandbox, aperta con la
 Docker API e collegata alla pagina da un websocket. Tab, frecce, `vim`, `top` e `less` funzionano come
 in `breakfix-sandbox shell`, e come lì i comandi non passano dal guardrail. Chiusa la pagina, i processi
