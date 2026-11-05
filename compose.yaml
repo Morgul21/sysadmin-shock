@@ -1,0 +1,52 @@
+# Tutta l'app in container: `docker compose up --build`, poi http://localhost:8000
+#
+# L'app crea e comanda container (le sandbox), quindi le serve un Docker. Non le diamo quello del
+# PC (il socket dell'host vale root sull'host) ma un Docker privato (Docker-in-Docker): le sandbox
+# nascono lì dentro e l'app non vede container, immagini e file del PC. Il Docker privato gira
+# `privileged`: è meglio del socket, non un isolamento perfetto.
+services:
+  docker:
+    image: docker:27.5.1-dind
+    privileged: true
+    environment:
+      # TLS con certificati client: l'API del Docker privato non è aperta a chi sta in rete.
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - docker-certs-client:/certs/client
+      # Immagini e cache di build: la sandbox si ribuilda in pochi secondi al riavvio.
+      - docker-data:/var/lib/docker
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: .
+    depends_on:
+      docker:
+        condition: service_healthy
+    environment:
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+      # Dal container, Ollama sul PC non è su localhost.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
+    env_file:
+      # Provider e API key; il .env non entra nell'immagine (.dockerignore).
+      - path: .env
+        required: false
+    extra_hosts:
+      # Su Docker Desktop esiste già; su Linux va dichiarato.
+      - host.docker.internal:host-gateway
+    volumes:
+      - docker-certs-client:/certs/client:ro
+      # Memory, audit trail e report degli eval restano sul PC.
+      - ./.breakfix:/app/.breakfix
+    ports:
+      # La UI dà una shell di root nella sandbox: raggiungibile solo da questo PC.
+      - 127.0.0.1:8000:8000
+
+volumes:
+  docker-certs-client:
+  docker-data:

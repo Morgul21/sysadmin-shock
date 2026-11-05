@@ -13,7 +13,7 @@ hints = [
 
 [ticket]
 from = "Paolo (magazzino)"
-subject = "Stesso problema di Giulia?"
+subject = "Stesso problema del ticket 2?"
 body = '''
 Anche a me l'app non parte, dice "Permission denied". A Giulia ieri l'avete
 sistemato al volo, forse è la stessa cosa?

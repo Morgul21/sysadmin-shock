@@ -145,7 +145,8 @@ def up() -> None:
 
 def reset(scenario: str = "") -> None:
     """Ricrea il container dall'immagine: ogni scenario parte da una sandbox sana."""
-    _docker("rm", "-f", CONTAINER_NAME, check=False, quiet=True)
+    # Senza output: al primo avvio il container non c'è ancora e Docker lo segnala come errore.
+    subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
     _docker("run", "-d", "--name", CONTAINER_NAME, "--label", f"{SCENARIO_LABEL}={scenario}",
             *RUN_FLAGS, IMAGE_NAME, quiet=True)
 

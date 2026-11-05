@@ -180,6 +180,11 @@ class TerminalTest(unittest.TestCase):
                 ws.send_json({"input": "è"})
                 self.assertEqual(ws.receive_bytes(), "eco:è".encode())
                 session = FakeSession.last
+                # La pagina si chiude. Si aspetta la chiusura dal server, cioè la fine dell'handler:
+                # uscendo dal `with`, il TestClient cancella l'handler, e se lo trova ancora a chiudere
+                # la sessione il test fallisce a caso con CancelledError.
+                ws.close()
+                self.assertEqual(ws.receive()["type"], "websocket.close")
         self.assertEqual(session.sizes, [(100, 30), (120, 40)])
         self.assertTrue(session.closed, "chiusa la pagina, la sessione si chiude")
 

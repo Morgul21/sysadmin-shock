@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import os
 import secrets
 import subprocess
 import threading
@@ -41,7 +42,9 @@ from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scen
 from breakfix.lessons import Exercise, LessonLab
 
 
-HOST = "127.0.0.1"
+# Solo 127.0.0.1: la UI dà una shell di root nella sandbox. In un container serve 0.0.0.0
+# (BREAKFIX_UI_HOST), e a limitare l'accesso al solo PC è la porta pubblicata su 127.0.0.1 (compose.yaml).
+HOST = os.getenv("BREAKFIX_UI_HOST", "127.0.0.1")
 DEFAULT_PORT = 8000
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DOCKER_ERRORS = (RuntimeError, subprocess.CalledProcessError, FileNotFoundError, docker.errors.DockerException)
@@ -290,7 +293,8 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true", help="non aprire il browser")
     args = parser.parse_args()
-    url = f"http://{HOST}:{args.port}"
+    # 0.0.0.0 non si apre nel browser: dal PC la UI si raggiunge su localhost.
+    url = f"http://{'localhost' if HOST == '0.0.0.0' else HOST}:{args.port}"
     print(f"Sysadmin Shock su {url} (Ctrl+C per fermare)")
     if not args.no_browser:
         threading.Timer(1.0, webbrowser.open, (url,)).start()

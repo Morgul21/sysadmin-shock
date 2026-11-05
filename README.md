@@ -2,18 +2,29 @@
 
 Una palestra per imparare il troubleshooting Linux **da soli**: uno scenario rompe apposta
 una sandbox Docker isolata (permessi e memoria), **l'utente** ci entra con una shell e la ripara,
-uno script di check dice **pass/fail**. Gli agenti non riparano al posto dell'utente:
+uno script di check dice **pass/fail**. Nessuno ripara al posto dell'utente:
 
-- il **tutor** dà indizi graduali, con riferimenti alle man page, ma senza mai fornire il comando di fix;
-- il **fixer** risolve ogni scenario in autonomia: dimostra che si può risolvere ed è il
+- gli **indizi** sono graduali (dove guardare, come verificarlo, la causa), con riferimenti alle man
+  page, e non danno mai il comando di fix. Oggi sono scritti a mano; un tutor LLM è nella roadmap;
+- il **fixer** è un agente che risolve ogni scenario in autonomia: dimostra che si può risolvere ed è il
   riferimento con cui l'utente può confrontarsi (passi, costo). È anche la base dell'eval di traiettoria.
 
 ## Architettura
 
-**Scelta: multi-agent con `DagPipeline` per generare gli scenari, single-agent per tutor e fixer.**
-Motivazione: generare, applicare e validare uno scenario sono passi con input/output distinti e
-verificabili separatamente (un DAG). Tutor e fixer invece sono loop osserva→ragiona→rispondi
-che un solo agente con un tool gestisce bene, e si misurano con eval deterministici.
+**Scelta: single-agent con un tool via MCP.** Il fixer fa un loop osserva→ragiona→agisci su un solo
+sistema, la sandbox: lancia un comando, legge l'output e decide il prossimo. Non ci sono sottocompiti
+indipendenti da parallelizzare né competenze diverse da separare, quindi più agenti aggiungerebbero
+solo passaggi, token e punti di errore. Un agente con un solo tool (`exec_in_sandbox`) basta, e si
+misura con un eval deterministico: il check dello scenario.
+
+Il tool sta in un server MCP e non dentro l'agente. Così il guardrail vale per qualunque host (il
+fixer, Claude Desktop), e l'agente non ha accesso diretto a Docker.
+
+**Evoluzione (roadmap): multi-agent con `DagPipeline` per generare nuovi scenari dalle man page.**
+Lì il DAG ha senso: scrivere, applicare e validare uno scenario sono passi con input e output
+distinti, verificabili uno per uno. Il Validator scarta uno scenario se dopo la rottura il check non
+fallisce, se dopo il fix di riferimento il check non passa, oppure se il container non è più sano.
+Oggi questa validazione la fa `breakfix-sandbox validate` sugli scenari scritti a mano.
 
 ```text
   (roadmap) DagPipeline scenari
@@ -28,9 +39,6 @@ che un solo agente con un tool gestisce bene, e si misurano con eval determinist
                                   └─► ContextTracing ─► .breakfix/audit/*.json
 ```
 
-Il Validator scarta uno scenario se dopo la rottura il check non fallisce, se dopo il fix di
-riferimento il check non passa, oppure se il container non è più sano.
-
 | Pezzo | File |
 |---|---|
 | Server MCP (FastMCP, 1 tool) | [src/breakfix/server.py](src/breakfix/server.py) |
@@ -42,6 +50,7 @@ riferimento il check non passa, oppure se il container non è più sano.
 | Eval del fixer sugli scenari | [src/breakfix/evaluate.py](src/breakfix/evaluate.py) |
 | UI dell'esercizio (FastAPI + xterm.js): ticket, terminale vero, indizi, check | [src/breakfix/web.py](src/breakfix/web.py), [src/breakfix/static/](src/breakfix/static/) |
 | Immagine della sandbox: l'app da rompere (+ log con prompt injection) | [sandbox/Dockerfile](sandbox/Dockerfile), [sandbox/app/](sandbox/app/), [sandbox/app.log](sandbox/app.log) |
+| L'app in container, con le sandbox in un Docker privato | [Dockerfile](Dockerfile), [compose.yaml](compose.yaml), [docker/entrypoint.sh](docker/entrypoint.sh) |
 | Agente fixer di riferimento (multi-provider, memory persistente) | [src/breakfix/agent.py](src/breakfix/agent.py) |
 | Test contratto MCP + integrazione datapizza | [tests/test_server.py](tests/test_server.py) |
 | Test guardrail (bloccati / fix legittimi) | [tests/test_guardrail.py](tests/test_guardrail.py) |
@@ -135,6 +144,32 @@ non è stato riparato. Ogni scenario parte da un container nuovo e da una memory
 La memory dell'agente è in `.breakfix/memory.json` (`breakfix-agent --reset-memory` per azzerarla).
 Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>-<trace>.json`.
 
+### In container (Docker Compose)
+
+Tutta l'app gira anche in container, senza Python né `.venv` sul PC: basta Docker Desktop.
+
+```powershell
+docker compose up --build -d     # builda l'app (con i test), poi la sandbox; la UI è su http://localhost:8000
+docker compose exec app breakfix-sandbox validate
+docker compose exec app breakfix-sandbox start 2
+docker compose exec app breakfix-sandbox shell
+docker compose exec app breakfix-eval
+docker compose down              # -v cancella anche immagini e cache del Docker privato
+```
+
+Il `.env` del PC arriva all'app come variabili d'ambiente, e non entra nell'immagine. Per Ollama il compose
+punta già a `host.docker.internal`. Memory, audit trail e report degli eval finiscono in `.breakfix/` sul PC,
+come senza container.
+
+L'app è insolita da containerizzare: il suo lavoro è **creare e comandare altri container** (le
+sandbox), quindi le serve un Docker. Le strade sono due:
+- **il socket del Docker del PC** (`/var/run/docker.sock`): chi lo controlla può avviare un container che
+  monta il disco, quindi è root sull'host. Scartata;
+- **un Docker privato** (Docker-in-Docker, servizio `docker` in [compose.yaml](compose.yaml)): le sandbox
+  nascono lì dentro e l'app non vede container, immagini e file del PC. È la scelta fatta. L'API del
+  Docker privato è in TLS con certificato client, condiviso solo con l'app. Limite: il Docker privato
+  gira `privileged`, quindi è meglio del socket, ma non è un isolamento perfetto.
+
 ### Configurazione
 
 | Variabile | Default | Note |
@@ -146,6 +181,7 @@ Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>
 | `LLM_TEMPERATURE` | non inviata | da impostare solo per modelli che la supportano |
 | `BREAKFIX_SANDBOX` | `docker` | `mock` per test/demo senza Docker |
 | `BREAKFIX_AUDIT_DIR` | `.breakfix/audit` | dove salvare l'audit trail |
+| `BREAKFIX_UI_HOST` | `127.0.0.1` (`0.0.0.0` nel container) | indirizzo su cui ascolta la UI |
 
 ## Basi
 
@@ -223,7 +259,7 @@ criterio (l'app riparte come utente `app`) più i controlli contro le correzioni
 
 Uno scenario è una cartella `scenarios/<id>/` con:
 - `scenario.toml`: titolo, categoria, difficoltà, il **ticket** dell'utente, gli indizi graduati e le
-  man page (gli ultimi due per il tutor);
+  man page (gli ultimi due li mostra la UI);
 - `break.sh`, `check.sh` e `fix.sh`, eseguiti come root nel container.
 
 Si parte da un ticket, come al lavoro: lo scrive un utente, quindi è vago e a volte fuorviante
@@ -274,6 +310,9 @@ Difesa a più livelli, dal più debole al più forte:
 5. **UI**: dà una shell di root nella sandbox, quindi ascolta solo su `127.0.0.1` e accetta POST e
    websocket solo dalla pagina stessa (header `Origin`): un altro sito aperto nel browser non può
    avviare scenari né aprire il terminale (i websocket non sono soggetti alla same-origin policy).
+   Nel container la UI ascolta su `0.0.0.0`, ma la porta è pubblicata solo su `127.0.0.1` del PC.
+6. **Docker privato** (solo con `docker compose`): l'app comanda un Docker-in-Docker, non quello del
+   PC, e gli parla in TLS con un certificato client. Vedi [In container](#in-container-docker-compose).
 
 **Audit trail.** Ogni esecuzione dell'agente è un trace di `ContextTracing`. Prima che il trace
 si chiuda, gli span (chiamate al modello con i token, chiamate ai tool con argomenti e risultato)
@@ -297,7 +336,7 @@ attuale: `--reset-memory`.
 - [x] **S14–S15** Indizi graduali scritti a mano per ogni ticket ed esercizio, con le man page (al posto del tutor LLM, spostato negli extra)
 - [x] **S15** UI nel browser (`breakfix-ui`): ticket, terminale vero, indizi, verifica
 - [x] **S15** Basi: 11 lezioni in 3 percorsi, ricavate dai ticket, con 39 esercizi validati su Docker; ogni ticket rimanda alle lezioni che lo preparano
-- [ ] **S15** README finale. Il lab resta fuori da un container: la UI apre shell nella sandbox via Docker API, e containerizzarla vorrebbe dire montare il socket di Docker (root sull'host)
+- [x] **S15** Tutta l'app in container (`docker compose up`): le sandbox nascono in un Docker privato (Docker-in-Docker), non su quello del PC; i test girano nel build e lo bloccano se falliscono
 - [ ] Extra: tutor LLM con guardrail di output "niente spoiler", DagPipeline Author→Breaker→Validator dalle man page, eval in CI
 
 ## Note e difficoltà
@@ -326,3 +365,7 @@ attuale: `--reset-memory`.
   con i task vecchi e 1/8 con i ticket. Diagnosticano ma spesso non applicano la correzione, e cercano i
   limiti di memoria nei percorsi della cgroup v1. Con una sola esecuzione, uno scenario di differenza è rumore.
 - `ClientFactory` invia `temperature=0.7` di default e `gpt-5.6-luna` risponde 400: la temperatura va passata esplicitamente (`None` = non inviata).
+- Containerizzare l'app non è stato "scrivere un Dockerfile": un'app che crea container ha bisogno di un
+  Docker, e dentro un container non ce n'è. Darle il socket dell'host sarebbe stato come darle root sul PC,
+  quindi le sandbox girano in un Docker-in-Docker. Gli scenari su cgroup, ACL e `/dev/shm` funzionano
+  anche annidati: `validate` dà OK su tutti dentro il container.
