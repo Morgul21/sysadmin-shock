@@ -101,12 +101,56 @@ class ApiTest(unittest.TestCase):
                 mock.patch.object(web.DockerLab, "check", return_value=CheckResult(True, "PASS: ok")):
             self.assertEqual(self.client.post("/api/check").json(), {"passed": True, "output": "PASS: ok"})
 
+    def test_lessons_list_the_roadmap(self) -> None:
+        listing = {lesson["number"]: lesson for lesson in self.client.get("/api/lessons").json()}
+        ticket = [s.id for s in self.scenarios].index("run-sh-noexec") + 1
+        self.assertEqual([e["key"] for e in listing[5]["exercises"]], ["5.1", "5.2", "5.3"])
+        self.assertIn(ticket, listing[5]["tickets"])
+        self.assertEqual(listing[6]["exercises"][0]["type"], "stato")
+
+    def test_the_ticket_points_to_its_lessons(self) -> None:
+        with self._active("run-sh-noexec"):
+            view = self.client.get("/api/active").json()
+        self.assertEqual([lesson["number"] for lesson in view["lessons"]], [5, 6])
+
+    def test_active_exercise(self) -> None:
+        with self._active("esercizio:5.3"):
+            view = self.client.get("/api/active").json()
+        self.assertEqual((view["kind"], view["key"], view["type"], view["next"]), ("esercizio", "5.3", "risposta", None))
+        self.assertIn("## Quale terna conta", view["lesson"]["explanation"])
+        with self._active("esercizio:5.1"):
+            self.assertEqual(self.client.get("/api/active").json()["next"], "5.2")
+        with self._active("esercizio:99.1"):
+            self.assertIsNone(self.client.get("/api/active").json())
+
+    def test_learn_starts_the_exercise(self) -> None:
+        with mock.patch.object(web.LessonLab, "__init__", return_value=None), \
+                mock.patch.object(web.LessonLab, "start") as start:
+            response = self.client.post("/api/learn/6.2")
+            self.assertEqual(self.client.post("/api/learn/99.1").status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(start.call_args.args[0].key, "6.2")
+        self.assertEqual(response.json()["lesson"]["title"], "Ottale e simbolico")
+
+    def test_check_sends_the_answer_to_the_exercise(self) -> None:
+        with self._active("esercizio:5.1"), mock.patch.object(web.LessonLab, "__init__", return_value=None), \
+                mock.patch.object(web.LessonLab, "check", return_value=CheckResult(False, "FAIL: no")) as check:
+            response = self.client.post("/api/check", json={"answer": "backup.sh"})
+        self.assertEqual(response.json(), {"passed": False, "output": "FAIL: no"})
+        exercise, answer = check.call_args.args
+        self.assertEqual((exercise.key, answer), ("5.1", "backup.sh"))
+        too_long = {"answer": "x" * 1000}
+        with self._active("esercizio:5.1"):
+            self.assertEqual(self.client.post("/api/check", json=too_long).status_code, 422)
+
     def test_other_sites_cannot_change_state(self) -> None:
         # Un altro sito aperto nel browser non deve poter avviare scenari né aprire la shell di root.
-        with mock.patch.object(web.DockerLab, "start") as start:
+        with mock.patch.object(web.DockerLab, "start") as start, mock.patch.object(web.LessonLab, "start") as learn:
             self.assertEqual(self.client.post("/api/start/1", headers=FOREIGN).status_code, 403)
+            self.assertEqual(self.client.post("/api/learn/5.1", headers=FOREIGN).status_code, 403)
             self.assertEqual(self.client.post("/api/check", headers=FOREIGN).status_code, 403)
         start.assert_not_called()
+        learn.assert_not_called()
         with mock.patch.object(web, "TerminalSession") as session, self.assertRaises(WebSocketDisconnect):
             with self.client.websocket_connect("/ws/terminal", headers=FOREIGN) as ws:
                 ws.receive_bytes()

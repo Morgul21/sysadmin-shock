@@ -58,6 +58,10 @@ header {
 h1 { font-size: 18px; margin: 0 12px 0 0; }
 h2 { font-size: 18px; margin: 0; }
 
+.tabs { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; }
+.tabs button { border: 0; background: transparent; padding: 4px 14px; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+
 .picker { display: flex; align-items: center; gap: 8px; flex: 1 1 320px; max-width: 560px; }
 .picker select { flex: 1; min-width: 0; }
 
@@ -110,6 +114,32 @@ code {
   padding: 1px 5px;
   font: 13px ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
+
+#ticket-view > * + *, #exercise-view > * + * { margin-top: 12px; }
+h3 { font-size: 16px; margin: 0; }
+
+/* Spiegazioni delle lezioni e testi degli esercizi */
+.prose h3 { margin: 16px 0 6px; }
+.prose p, .prose ul, .prose ol { margin: 0 0 8px; }
+.prose ul, .prose ol { padding-left: 22px; }
+.prose li + li { margin-top: 2px; }
+.prose pre { margin: 0 0 8px; }
+#exercise-task { margin-top: 6px; }
+
+.answer { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.answer input {
+  flex: 1;
+  min-width: 0;
+  font: 14px ui-monospace, "Cascadia Mono", Consolas, monospace;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+button.link { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .steps { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .steps button { font: 13px ui-monospace, "Cascadia Mono", Consolas, monospace; padding: 4px 8px; }

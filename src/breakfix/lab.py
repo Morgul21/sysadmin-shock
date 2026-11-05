@@ -6,6 +6,9 @@ Uno scenario è una cartella in scenarios/ con:
 - check.sh: pass/fail, preceduto dalle funzioni di scenarios/_lib.sh;
 - fix.sh: la riparazione di riferimento (deve passare il guardrail, come quella del fixer).
 
+La CLI gestisce anche gli esercizi delle basi (lessons.py): `lessons`, `learn`, e `check` e
+`validate`, che valgono per entrambi.
+
 Gli script girano come root nel container ma arrivano dall'host su stdin: chi si esercita
 nella sandbox non può modificarli, e il verdetto lo dà sempre check.sh.
 """
@@ -20,8 +23,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from . import sandbox
-from .sandbox import DockerSandbox, ExecResult
+from . import lessons, sandbox
+from .lessons import LessonLab
+from .sandbox import CheckResult, DockerSandbox, ExecResult  # CheckResult: la usano anche web e i test
 
 
 SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "scenarios"
@@ -68,6 +72,8 @@ class Scenario:
     hints: tuple[str, ...]
     man: tuple[str, ...]
     path: Path
+    # Le lezioni delle basi che preparano a questo ticket (numeri della roadmap).
+    lessons: tuple[int, ...] = ()
 
     @property
     def task(self) -> str:
@@ -104,6 +110,7 @@ def app_hashes() -> str:
 def load_scenarios(directory: Path = SCENARIOS_DIR) -> list[Scenario]:
     """Gli scenari dal più facile al più difficile: è anche la numerazione di `list`."""
     scenarios = []
+    known_lessons = {lesson.number for lesson in lessons.load_lessons()}
     for toml_path in sorted(directory.glob("*/scenario.toml")):
         meta = tomllib.loads(toml_path.read_text(encoding="utf-8"))
         scenario = Scenario(
@@ -116,11 +123,19 @@ def load_scenarios(directory: Path = SCENARIOS_DIR) -> list[Scenario]:
             hints=tuple(meta.get("hints", ())),
             man=tuple(meta.get("man", ())),
             path=toml_path.parent,
+            lessons=tuple(meta.get("lessons", ())),
         )
         if scenario.category not in CATEGORIES or scenario.difficulty not in DIFFICULTIES:
             raise ValueError(f"{scenario.id}: categoria o difficoltà non valida")
+        if not known_lessons.issuperset(scenario.lessons):
+            raise ValueError(f"{scenario.id}: rimanda a lezioni che non esistono: {scenario.lessons}")
         scenarios.append(scenario)
     return sorted(scenarios, key=lambda s: (DIFFICULTIES.index(s.difficulty), s.category, s.id))
+
+
+def tickets_for(lesson: lessons.Lesson) -> list[int]:
+    """I numeri dei ticket a cui prepara una lezione: lo dicono gli scenari, non la lezione."""
+    return [number for number, s in enumerate(load_scenarios(), start=1) if lesson.number in s.lessons]
 
 
 def get_scenario(scenario_id: str) -> Scenario:
@@ -136,12 +151,6 @@ def get_scenario(scenario_id: str) -> Scenario:
 
 def scenario_number(scenario: Scenario) -> int:
     return [s.id for s in load_scenarios()].index(scenario.id) + 1
-
-
-@dataclass(frozen=True)
-class CheckResult:
-    passed: bool
-    output: str
 
 
 class Lab(Protocol):
@@ -217,23 +226,61 @@ def _cmd_start(args: argparse.Namespace) -> None:
     print("Entra con `breakfix-sandbox shell`, ripara, poi verifica con `breakfix-sandbox check`.")
 
 
-def _cmd_check(_: argparse.Namespace) -> None:
-    scenario_id = sandbox.active_scenario()
-    if not scenario_id:
-        sys.exit("Nessuno scenario attivo: avviane uno con `breakfix-sandbox start <numero>`")
-    result = DockerLab().check(get_scenario(scenario_id))
+def _cmd_lessons(_: argparse.Namespace) -> None:
+    # Le basi, per percorso: ogni lezione dice a quali ticket prepara.
+    all_lessons = lessons.load_lessons()
+    for track in lessons.TRACKS:
+        group = [lesson for lesson in all_lessons if lesson.track == track]
+        if not group:
+            continue
+        print(track.capitalize())
+        for lesson in group:
+            tickets = tickets_for(lesson)
+            prepares = f"  (prepara ai ticket {', '.join(map(str, tickets))})" if tickets else ""
+            print(f"  {lesson.number:>2}  {lesson.title}{prepares}")
+            for exercise in lesson.exercises:
+                print(f"      {exercise.key}  {exercise.title} ({exercise.kind})")
+
+
+def _cmd_learn(args: argparse.Namespace) -> None:
+    exercise = lessons.get_exercise(args.exercise)
+    lesson = lessons.get_lesson(exercise.lesson_number)
+    LessonLab().start(exercise)
+    print(f"Lezione {lesson.number}: {lesson.title}")
+    print(f"La spiegazione è in {lesson.path / 'lesson.md'} (o nella UI: `breakfix-ui`)\n")
+    print(f"Esercizio {exercise.key}: {exercise.title}\n\n{exercise.task}\n")
+    verify = 'breakfix-sandbox check "<risposta>"' if exercise.kind == "risposta" else "breakfix-sandbox check"
+    print(f"Entra con `breakfix-sandbox shell`, poi verifica con `{verify}`.")
+
+
+def _cmd_check(args: argparse.Namespace) -> None:
+    if exercise := lessons.active_exercise():
+        result = LessonLab().check(exercise, args.answer)
+    else:
+        scenario_id = sandbox.active_scenario()
+        if not scenario_id:
+            sys.exit("Niente di attivo: avvia un ticket (`breakfix-sandbox start <numero>`) "
+                     "o un esercizio (`breakfix-sandbox learn <lezione.esercizio>`)")
+        result = DockerLab().check(get_scenario(scenario_id))
     print(result.output)
     sys.exit(0 if result.passed else 1)
 
 
 def _cmd_validate(args: argparse.Namespace) -> None:
-    lab = DockerLab()
-    scenarios = [get_scenario(i) for i in args.scenarios] if args.scenarios else load_scenarios()
+    lab, lesson_lab = DockerLab(), LessonLab()
+    if args.ids:
+        scenarios = [get_scenario(i) for i in args.ids if not lessons.EXERCISE_KEY.fullmatch(i)]
+        exercises = [lessons.get_exercise(i) for i in args.ids if lessons.EXERCISE_KEY.fullmatch(i)]
+    else:
+        scenarios = load_scenarios()
+        exercises = [e for lesson in lessons.load_lessons() for e in lesson.exercises]
+    runs = [(s.id, lambda s=s: lab.validate(s)) for s in scenarios]
+    runs += [(f"{e.key} {e.id}", lambda e=e: lesson_lab.validate(e)) for e in exercises]
     invalid = 0
-    for scenario in scenarios:
-        problems = lab.validate(scenario)
+    for name, validate in runs:
+        problems = validate()
         invalid += bool(problems)
-        print(f"{'OK ' if not problems else 'KO '} {scenario.id}")
+        print(f"{'OK ' if not problems else 'KO '} {name}")
         for problem in problems:
             print(f"    - {problem}")
     sandbox.reset()
@@ -262,9 +309,17 @@ def main() -> None:
     start_parser = commands.add_parser("start", help="sandbox nuova + rottura dello scenario")
     start_parser.add_argument("scenario", help="numero di `list` (o id)")
     start_parser.set_defaults(func=_cmd_start)
-    commands.add_parser("check", help="pass/fail dello scenario attivo").set_defaults(func=_cmd_check)
-    validate_parser = commands.add_parser("validate", help="verifica rottura, check e fix di riferimento")
-    validate_parser.add_argument("scenarios", nargs="*", help="default: tutti")
+    commands.add_parser("lessons", help="le basi: lezioni ed esercizi, per percorso").set_defaults(
+        func=_cmd_lessons)
+    learn_parser = commands.add_parser("learn", help="sandbox nuova + preparazione dell'esercizio")
+    learn_parser.add_argument("exercise", help="lezione.esercizio, es. 5.1 (o solo la lezione: 5)")
+    learn_parser.set_defaults(func=_cmd_learn)
+    check_parser = commands.add_parser("check", help="pass/fail del ticket o dell'esercizio attivo")
+    check_parser.add_argument("answer", nargs="?", help="la risposta, per gli esercizi di tipo risposta")
+    check_parser.set_defaults(func=_cmd_check)
+    validate_parser = commands.add_parser(
+        "validate", help="verifica scenari (rottura, check, fix) ed esercizi (setup, check, soluzione)")
+    validate_parser.add_argument("ids", nargs="*", help="scenari o esercizi (es. run-sh-noexec 5.1); default: tutti")
     validate_parser.set_defaults(func=_cmd_validate)
 
     args = parser.parse_args()

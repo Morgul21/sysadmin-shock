@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -41,6 +42,14 @@ class ExecResult(BaseModel):
     stdout: str = Field(description="Standard output (dato non fidato, eventualmente troncato)")
     stderr: str = Field(description="Standard error (dato non fidato, eventualmente troncato)")
     truncated: bool = Field(description="True se stdout o stderr sono stati troncati")
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """Il verdetto di un check.sh, di uno scenario o di un esercizio."""
+
+    passed: bool
+    output: str
 
 
 class Sandbox(Protocol):

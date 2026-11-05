@@ -2,6 +2,8 @@ title = "Script di avvio non eseguibile"
 category = "permessi"
 difficulty = "facile"
 man = ["chmod(1)", "ls(1)", "stat(1)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [5, 6]
 hints = [
     "Lancia `gestionale` e leggi l'errore: quale file viene negato? `cat \"$(which gestionale)\"` ti dice quale script avvia e con quale utente.",
     "Guarda i permessi di quello script con `ls -l` o `stat`: quali bit ha chi lo deve eseguire?",

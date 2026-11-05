@@ -38,6 +38,7 @@ riferimento il check non passa, oppure se il container non è più sano.
 | Audit trail da ContextTracing | [src/breakfix/audit.py](src/breakfix/audit.py) |
 | Backend sandbox Docker / mock | [src/breakfix/sandbox.py](src/breakfix/sandbox.py) |
 | Scenari + CLI `breakfix-sandbox` (start, check, validate) | [src/breakfix/lab.py](src/breakfix/lab.py), [scenarios/](scenarios/) |
+| Basi: lezioni ed esercizi (CLI `lessons`, `learn`) | [src/breakfix/lessons.py](src/breakfix/lessons.py), [lessons/](lessons/) |
 | Eval del fixer sugli scenari | [src/breakfix/evaluate.py](src/breakfix/evaluate.py) |
 | UI dell'esercizio (FastAPI + xterm.js): ticket, terminale vero, indizi, check | [src/breakfix/web.py](src/breakfix/web.py), [src/breakfix/static/](src/breakfix/static/) |
 | Immagine della sandbox: l'app da rompere (+ log con prompt injection) | [sandbox/Dockerfile](sandbox/Dockerfile), [sandbox/app/](sandbox/app/), [sandbox/app.log](sandbox/app.log) |
@@ -47,6 +48,7 @@ riferimento il check non passa, oppure se il container non è più sano.
 | Test end-to-end injection → blocco → audit (senza API key) | [tests/test_agent_trace.py](tests/test_agent_trace.py) |
 | Test struttura scenari + runner degli eval (senza Docker) | [tests/test_scenarios.py](tests/test_scenarios.py), [tests/test_evaluate.py](tests/test_evaluate.py) |
 | Test della UI: API senza spoiler, origine, websocket del terminale (senza Docker) | [tests/test_web.py](tests/test_web.py) |
+| Test struttura lezioni, risposta quotata, collegamento ai ticket (senza Docker) | [tests/test_lessons.py](tests/test_lessons.py) |
 
 ## Installazione
 
@@ -83,26 +85,32 @@ $env:BREAKFIX_SANDBOX = "mock"; breakfix-agent --list-tools
 # 3. Sandbox vera (Docker Desktop avviato): builda l'immagine e verifica gli scenari
 Remove-Item Env:BREAKFIX_SANDBOX
 breakfix-sandbox up
-breakfix-sandbox validate          # per ogni scenario: sana passa, rotta fallisce, riparata passa
+breakfix-sandbox validate          # scenari: sana passa, rotta fallisce, riparata passa; esercizi: vedi Basi
 
-# 4. Esercizio: si sceglie un ticket, lo si ripara dalla shell, si chiede il verdetto
+# 4. Le basi: lezioni con esercizi verificati, che preparano ai ticket
+breakfix-sandbox lessons                 # la roadmap: percorsi, lezioni, esercizi, a quali ticket preparano
+breakfix-sandbox learn 5.1               # sandbox nuova + preparazione dell'esercizio; stampa il testo
+breakfix-sandbox check "backup.sh"       # esercizi di tipo risposta (quelli di stato: `check` e basta)
+
+# 5. Esercizio: si sceglie un ticket, lo si ripara dalla shell, si chiede il verdetto
 breakfix-sandbox list                    # numero, categoria, difficoltà, oggetto (niente spoiler)
 breakfix-sandbox start 2                 # sandbox nuova + rottura; stampa il ticket
 breakfix-sandbox shell                   # shell di root sul server (exit per uscire)
 breakfix-sandbox check                   # PASS/FAIL dello scenario attivo
 
-# 4b. Lo stesso esercizio dal browser: ticket, terminale, indizi e check in una pagina
+# 5b. Basi e ticket dal browser: spiegazione o ticket, terminale, indizi e check in una pagina
 breakfix-ui
 
-# 5. Il riferimento: il fixer su tutti gli scenari (o su alcuni), con passi e token
+# 6. Il riferimento: il fixer su tutti gli scenari (o su alcuni), con passi e token
 breakfix-eval
 breakfix-eval run-sh-noexec memory-hog
 
 breakfix-sandbox down
 ```
 
-**La UI** (`breakfix-ui`, FastAPI su http://127.0.0.1:8000) fa `list`, `start`, `shell` e `check`
-dal browser. In alto si sceglie il ticket e si preme *Avvia*; la sezione dell'esercizio mostra il
+**La UI** (`breakfix-ui`, FastAPI su http://127.0.0.1:8000) fa `lessons`, `learn`, `list`, `start`,
+`shell` e `check` dal browser, con due schede: **Basi** (vedi sotto) e **Ticket**. In alto si sceglie
+l'esercizio o il ticket e si preme *Avvia*; la sezione dell'esercizio mostra il
 ticket, *Come orientarsi* (i primi comandi di ogni ticket: un clic li esegue nel terminale), gli indizi
 graduali (uno per volta, a richiesta: dove guardare, come verificarlo, la causa; mai il comando del
 fix) e il pulsante *Verifica*. Accanto c'è un terminale vero ([xterm.js](https://xtermjs.org/), incluso
@@ -129,6 +137,48 @@ Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>
 | `LLM_TEMPERATURE` | non inviata | da impostare solo per modelli che la supportano |
 | `BREAKFIX_SANDBOX` | `docker` | `mock` per test/demo senza Docker |
 | `BREAKFIX_AUDIT_DIR` | `.breakfix/audit` | dove salvare l'audit trail |
+
+## Basi
+
+Chi parte da zero non sa ancora leggere `ls -l`: i ticket presuppongono dei comandi. Le basi li
+insegnano, ma solo quelli che servono ai ticket. La roadmap si ricava dai fix degli scenari, così i
+comandi da imparare restano pochi e ogni lezione ha uno scopo concreto:
+
+| Percorso | Lezione | Comandi | Prepara a |
+|---|---|---|---|
+| Orientarsi | 1. Chi sono, dove sono | `pwd` `ls` `cd` `id` `runuser` | tutti |
+| | 2. Leggere file e log | `cat` `less` `tail` `grep` | tutti |
+| | 3. Trovare le cose | `which` `find` | `stale-root-file` |
+| | 4. Combinare comandi | pipe, `xargs`, `find -exec`, redirect | `stale-root-file` |
+| Permessi | **5. Leggere i permessi** | `ls -l` `stat` `id`, quale terna conta | `run-sh-noexec` |
+| | **6. Ottale e simbolico** | `chmod 640` / `chmod u+x`, perché non 777 | `run-sh-noexec` |
+| | 7. Proprietari | `chown` `chgrp` | `conf-root-owned`, `stale-root-file` |
+| | 8. Le directory | la `x` su una cartella, `namei -l` | `srv-no-traverse` |
+| | 9. ACL | il `+` in `ls -l`, `getfacl` `setfacl` | `log-acl-deny` |
+| Processi e memoria | 10. Processi | `ps` `top` `kill`, segnali | `memory-hog` |
+| | 11. Memoria e limiti | `free`, `/proc/meminfo`, `df`, tmpfs, cgroup | `cache-too-big`, `shm-full` |
+
+In grassetto le lezioni già scritte. Il collegamento sta negli scenari (`lessons = [5, 6]` in
+`scenario.toml`): la UI mostra nel ticket le lezioni che preparano, e alla fine di una lezione propone
+il ticket.
+
+Una lezione è una cartella `lessons/<numero>-<nome>/` con:
+- `lesson.toml`: titolo, percorso, man page e gli esercizi (testo, tipo, indizi);
+- `lesson.md`: la spiegazione, in un markdown minimo; i blocchi ` ```prova ` diventano pulsanti che
+  eseguono il comando nel terminale;
+- una cartella per esercizio con `setup.sh`, `check.sh` e `solution.sh`, preceduti da
+  [lessons/_lib.sh](lessons/_lib.sh).
+
+È la stessa macchina degli scenari, con due differenze:
+- **due tipi di esercizio**: *stato* (si cambia il sistema e `check.sh` verifica il risultato) e
+  *risposta* (si scrive una risposta e `check.sh` la confronta con il valore vero, calcolato sul
+  sistema al momento del check). La risposta arriva al check quotata, come dato;
+- **dati a caso**: `setup.sh` sceglie nomi, proprietari e permessi a ogni avvio, così la risposta va
+  trovata sul sistema e non ricordata. Per questo `validate` prova ogni esercizio tre volte: appena
+  preparato il check fallisce, con la soluzione di riferimento passa.
+
+Come nei ticket si verifica il risultato, mai i comandi digitati: un test controlla che né il testo né
+gli indizi contengano la soluzione.
 
 ## Scenari
 
@@ -231,9 +281,11 @@ attuale: `--reset-memory`.
 - [x] Ruoli invertiti: chi impara ripara (`breakfix-sandbox shell`), il fixer diventa il riferimento
 - [x] **S13** Guardrail su `exec_in_sandbox` (denylist, niente `chmod 777`) + ContextTracing come audit trail; prompt injection di prova piantata nel log della sandbox
 - [x] **S14** 8 scenari (5 permessi + 3 memoria) con rottura, check e fix di riferimento, validati su Docker; `breakfix-eval` per il fixer (pass/fail, passi, token)
-- [ ] **S14–S15** Tutor: indizi graduali con citazioni delle man page + guardrail di output "niente spoiler" (blocca le risposte che contengono il fix di riferimento)
-- [ ] **S15** Dockerfile dell'app + README finale
-- [ ] Extra: DagPipeline Author→Breaker→Validator dalle man page, tutor usato da Claude Desktop, eval in CI
+- [x] **S14–S15** Indizi graduali scritti a mano per ogni ticket ed esercizio, con le man page (al posto del tutor LLM, spostato negli extra)
+- [x] **S15** UI nel browser (`breakfix-ui`): ticket, terminale vero, indizi, verifica
+- [ ] **S15** Basi: roadmap di 11 lezioni in 3 percorsi, ricavata dai ticket; scritte la 5 e la 6 (6 esercizi, validati su Docker)
+- [ ] **S15** README finale. Il lab resta fuori da un container: la UI apre shell nella sandbox via Docker API, e containerizzarla vorrebbe dire montare il socket di Docker (root sull'host)
+- [ ] Extra: tutor LLM con guardrail di output "niente spoiler", DagPipeline Author→Breaker→Validator dalle man page, eval in CI
 
 ## Note e difficoltà
 

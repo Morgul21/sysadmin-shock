@@ -1,7 +1,8 @@
 """La UI dell'esercizio (FastAPI + xterm.js): ticket, terminale vero, indizi e verdetto in una pagina.
 
-Fa quello che fa la CLI `breakfix-sandbox` (list, start, shell, check), dal browser:
-- l'API REST elenca i ticket, avvia uno scenario e dà il verdetto di check.sh;
+Fa quello che fa la CLI `breakfix-sandbox` (list, start, lessons, learn, shell, check), dal browser:
+- l'API REST elenca i ticket e le lezioni delle basi, avvia uno scenario o un esercizio e dà il
+  verdetto di check.sh (con la risposta, per gli esercizi che la chiedono);
 - il terminale è una bash con TTY vero nella sandbox (Docker API: exec con tty), collegata
   al browser da un websocket: Tab, frecce, vim, top e less funzionano come in `breakfix-sandbox shell`.
 
@@ -33,8 +34,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import Headers
 
-from breakfix import sandbox
-from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number
+from pydantic import BaseModel, Field
+
+from breakfix import lessons, sandbox
+from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
+from breakfix.lessons import Exercise, LessonLab
 
 
 HOST = "127.0.0.1"
@@ -99,6 +103,7 @@ def scenario_view(scenario: Scenario) -> dict[str, Any]:
     """Quello che la pagina mostra di uno scenario: id e titolo no, direbbero la causa."""
     ticket = scenario.ticket
     return {
+        "kind": "ticket",
         "number": scenario_number(scenario),
         "category": scenario.category,
         "difficulty": scenario.difficulty,
@@ -107,7 +112,33 @@ def scenario_view(scenario: Scenario) -> dict[str, Any]:
         # Tutti, ma la pagina li svela uno per volta: chi si esercita non bara con se stesso.
         "hints": list(scenario.hints),
         "man": list(scenario.man),
+        # Le lezioni delle basi che preparano a questo ticket.
+        "lessons": [{"number": n, "title": lessons.get_lesson(n).title} for n in scenario.lessons],
     }
+
+
+def exercise_view(exercise: Exercise) -> dict[str, Any]:
+    """Un esercizio con la sua lezione: qui niente da nascondere, tranne la soluzione."""
+    lesson = lessons.get_lesson(exercise.lesson_number)
+    keys = [e.key for e in lesson.exercises]
+    position = keys.index(exercise.key)
+    return {
+        "kind": "esercizio",
+        "key": exercise.key,
+        "title": exercise.title,
+        "type": exercise.kind,
+        "task": exercise.task,
+        "hints": list(exercise.hints),
+        "next": keys[position + 1] if position + 1 < len(keys) else None,
+        "lesson": {"number": lesson.number, "title": lesson.title, "track": lesson.track,
+                   "man": list(lesson.man), "explanation": lesson.explanation,
+                   "exercises": len(keys), "tickets": tickets_for(lesson)},
+    }
+
+
+class CheckRequest(BaseModel):
+    # Solo per gli esercizi di tipo risposta; i ticket e gli esercizi di stato non la usano.
+    answer: str | None = Field(default=None, max_length=lessons.MAX_ANSWER_CHARS)
 
 
 def same_origin(headers: Headers) -> bool:
@@ -145,8 +176,19 @@ def scenarios() -> list[dict[str, Any]]:
             for number, s in enumerate(load_scenarios(), start=1)]
 
 
+@app.get("/api/lessons")
+def lesson_list() -> list[dict[str, Any]]:
+    # Come `breakfix-sandbox lessons`: la roadmap delle basi, con i ticket a cui prepara ogni lezione.
+    return [{"number": lesson.number, "title": lesson.title, "track": lesson.track,
+             "tickets": tickets_for(lesson),
+             "exercises": [{"key": e.key, "title": e.title, "type": e.kind} for e in lesson.exercises]}
+            for lesson in lessons.load_lessons()]
+
+
 @app.get("/api/active")
 def active() -> dict[str, Any] | None:
+    if exercise := lessons.active_exercise():
+        return exercise_view(exercise)
     scenario = _active()
     return scenario_view(scenario) if scenario else None
 
@@ -165,11 +207,29 @@ async def start(number: int) -> dict[str, Any]:
     return scenario_view(scenario)
 
 
+@app.post("/api/learn/{key}", dependencies=[Depends(require_same_origin)])
+async def learn(key: str) -> dict[str, Any]:
+    try:
+        exercise = lessons.get_exercise(key)
+    except KeyError as exc:
+        raise HTTPException(404, exc.args[0]) from exc
+    try:
+        await asyncio.to_thread(LessonLab().start, exercise)
+    except DOCKER_ERRORS as exc:
+        raise HTTPException(503, f"avvio fallito: {exc}. Docker Desktop è avviato? "
+                                 "L'immagine va buildata una volta con `breakfix-sandbox up`.") from exc
+    return exercise_view(exercise)
+
+
 @app.post("/api/check", dependencies=[Depends(require_same_origin)])
-async def check() -> dict[str, Any]:
+async def check(request: CheckRequest | None = None) -> dict[str, Any]:
+    if exercise := lessons.active_exercise():
+        answer = request.answer if request else None
+        result = await asyncio.to_thread(LessonLab().check, exercise, answer)
+        return {"passed": result.passed, "output": result.output}
     scenario = _active()
     if scenario is None:
-        raise HTTPException(409, "nessuno scenario attivo")
+        raise HTTPException(409, "nessun ticket o esercizio attivo")
     result = await asyncio.to_thread(DockerLab().check, scenario)
     return {"passed": result.passed, "output": result.output}
 

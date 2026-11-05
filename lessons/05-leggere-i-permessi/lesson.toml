@@ -1,0 +1,42 @@
+title = "Leggere i permessi"
+track = "permessi"
+man = ["ls(1)", "stat(1)", "id(1)", "runuser(1)"]
+
+[[exercises]]
+id = "non-eseguibile"
+title = "Lo script che non parte"
+kind = "risposta"
+task = '''
+In `/srv/esercizi` ci sono cinque script. Uno solo **non** può essere eseguito dal suo
+proprietario: quale? Scrivi il nome del file.
+'''
+hints = [
+    "Guarda la prima colonna di `ls -l /srv/esercizi`: la terna del proprietario sono i caratteri dal 2 al 4.",
+    "Cerca la terna del proprietario senza la `x` in terza posizione. Per questa domanda le altre due terne non contano.",
+]
+
+[[exercises]]
+id = "gruppo"
+title = "Il file del magazzino"
+kind = "risposta"
+task = '''
+In `/srv/esercizi/documenti` un solo file appartiene al **gruppo** `magazzino`. Quale?
+'''
+hints = [
+    "In `ls -l`, dopo i permessi e il numero di link, ci sono due nomi: prima il proprietario, poi il gruppo.",
+    "Un utente può avere `magazzino` come gruppo principale (lo vedi con `id`), ma conta il gruppo scritto sul file, non quello di chi lo possiede.",
+]
+
+[[exercises]]
+id = "app-legge"
+title = "app può leggerlo?"
+kind = "risposta"
+task = '''
+L'utente `app` può leggere `/srv/esercizi/nota.txt`? Ragiona su `ls -l` e `id app`,
+poi rispondi `si` o `no`. Prima di rispondere puoi controllare eseguendo un comando come `app`.
+'''
+hints = [
+    "Chi è il proprietario del file? Qual è il gruppo? `id app` ti dice in quali gruppi è app.",
+    "Conta una sola terna: se app è il proprietario conta la prima, anche se le altre gli darebbero di più.",
+    "Per provarlo davvero, esegui `cat` sul file come utente app: il comando è nella spiegazione, sotto «Quale terna conta».",
+]
