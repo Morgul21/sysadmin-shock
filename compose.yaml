@@ -34,8 +34,9 @@ services:
       DOCKER_HOST: tcp://docker:2376
       DOCKER_TLS_VERIFY: "1"
       DOCKER_CERT_PATH: /certs/client
-      # Dal container, Ollama sul PC non è su localhost.
-      OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
+      # Quello del .env se c'è (es. un server vLLM in rete); altrimenti Ollama sul PC, che dal
+      # container non è su localhost. Un valore fisso qui vincerebbe sul .env (env_file).
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
     env_file:
       # Provider e API key; il .env non entra nell'immagine (.dockerignore).
       - path: .env
