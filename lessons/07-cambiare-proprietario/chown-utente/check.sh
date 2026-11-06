@@ -1,0 +1,5 @@
+f="$EX/report.txt"
+[ "$(stat -c %U "$f")" = app ] || fail "il proprietario di report.txt è $(stat -c %U "$f"), non app"
+[ "$(stat -c %G "$f")" = "$(saved report.group)" ] || fail "il gruppo doveva restare $(saved report.group), ora è $(stat -c %G "$f")"
+[ "$(mode "$f")" = 640 ] || fail "i permessi sono cambiati: $(stat -c %A "$f") (dovevano restare -rw-r-----)"
+pass "report.txt ora è di $(stat -c %U:%G "$f")"

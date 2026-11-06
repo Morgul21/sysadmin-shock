@@ -3,15 +3,24 @@ category = "permessi"
 difficulty = "media"
 # Stesso sintomo di run-sh-noexec, causa diversa: run.sh ha i permessi giusti, /srv no.
 man = ["path_resolution(7)", "namei(1)", "chmod(1)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [5, 8]
 hints = [
     "Il sintomo è lo stesso di un altro ticket, ma la causa potrebbe no: prima di correggere, controlla con `ls -l` se lo script di avvio ha davvero i permessi sbagliati.",
     "Per arrivare a un file bisogna poter attraversare ogni directory del percorso: `namei -l` sul percorso completo dello script mostra i permessi di ognuna, dalla radice in giù.",
     "Lo script è a posto: è `/srv` a non essere attraversabile dagli altri utenti (manca la x), quindi app non arriva ai file che contiene.",
 ]
 
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\bchmod\s+(?:-\S+\s+)*[ugoa,+=rwxXst0-7-]+\s+/srv/?(?![\w/-])',
+]
+
 [ticket]
 from = "Paolo (magazzino)"
-subject = "Stesso problema di Giulia?"
+subject = "Stesso problema del ticket 2?"
 body = '''
 Anche a me l'app non parte, dice "Permission denied". A Giulia ieri l'avete
 sistemato al volo, forse è la stessa cosa?

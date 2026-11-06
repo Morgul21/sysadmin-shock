@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from datapizza.core.clients.client import Client
 from datapizza.memory import Memory
 
-from .agent import AUDIT_DIR, STATE_DIR, AgentRunError, build_llm_client, run_agent, utf8_console
+from .agent import AUDIT_DIR, STATE_DIR, AgentRunError, ToolObserver, build_llm_client, run_agent, utf8_console
 from .lab import DockerLab, Lab, Scenario, get_scenario, load_scenarios
 
 
@@ -44,20 +44,26 @@ class EvalRow:
     duration_s: float
     audit_path: str
     error: str | None = None
+    answer: str | None = None  # quello che l'agente dice di aver fatto: lo si confronta con il verdetto
 
 
-async def evaluate_scenario(scenario: Scenario, client: Client, lab: Lab, audit_dir: Path = AUDIT_DIR) -> EvalRow:
-    lab.start(scenario)
+async def evaluate_scenario(
+    scenario: Scenario, client: Client, lab: Lab, audit_dir: Path = AUDIT_DIR, on_tool: ToolObserver | None = None
+) -> EvalRow:
+    """Lo usa anche la UI (pulsante "Fallo risolvere all'AI"): la stessa prova, in diretta.
+    Avvio e check di Docker vanno in un thread, così il server web non si ferma ad aspettarli."""
+    await asyncio.to_thread(lab.start, scenario)
     started = time.monotonic()
     error = None
     try:
-        _, audit_path = await run_agent(scenario.task, client, Memory(), audit_dir=audit_dir)
+        _, audit_path = await run_agent(scenario.task, client, Memory(), audit_dir=audit_dir, on_tool=on_tool)
     except AgentRunError as exc:
         audit_path, error = exc.audit_path, str(exc)
     duration = time.monotonic() - started
     # Anche se l'agente è fallito a metà, conta lo stato in cui ha lasciato la sandbox.
-    check = lab.check(scenario)
-    summary = json.loads(audit_path.read_text(encoding="utf-8"))["summary"]
+    check = await asyncio.to_thread(lab.check, scenario)
+    run = json.loads(audit_path.read_text(encoding="utf-8"))
+    summary = run["summary"]
     return EvalRow(
         scenario=scenario.id,
         category=scenario.category,
@@ -71,6 +77,7 @@ async def evaluate_scenario(scenario: Scenario, client: Client, lab: Lab, audit_
         duration_s=round(duration, 1),
         audit_path=str(audit_path),
         error=error,
+        answer=run["final_answer"],
     )
 
 

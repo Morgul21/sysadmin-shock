@@ -1,0 +1,73 @@
+title = "Combinare comandi con stdin, stdout, stderr, pipe e xargs"
+track = "orientarsi"
+man = ["bash(1)", "wc(1)", "xargs(1)", "find(1)"]
+
+[[exercises]]
+id = "pipe-wc"
+title = "Contare righe con una pipe e wc -l"
+kind = "risposta"
+task = '''
+`/srv/esercizi/log` contiene più di cento file: alcuni finiscono in `.log`, altri no. Quanti sono i
+file `.log`? Contarli a occhio è impossibile: elencali con `ls` o `find` e manda l'elenco a `wc -l`
+con una pipe (`|`), che conta le righe.
+'''
+hints = [
+    "La pipe passa lo **stdout** del primo comando allo **stdin** del secondo: `comando-che-elenca | wc -l`.",
+    "Elenca solo i nomi che finiscono in `.log`: con `ls` usa `*.log` dopo il percorso della cartella, con `find` la condizione `-name`.",
+]
+
+[[exercises]]
+id = "redirect-stdout"
+title = "Salvare lo stdout in un file con >"
+kind = "stato"
+task = '''
+Salva l'elenco dei file della cartella `/srv/esercizi/dati` nel file `/srv/esercizi/elenco.txt`:
+lancia `ls /srv/esercizi/dati` e, invece di lasciarlo stampare nel terminale, manda il suo **stdout**
+nel file. Poi controlla con `cat /srv/esercizi/elenco.txt`.
+'''
+hints = [
+    "`comando > file` scrive lo stdout del comando nel file, invece che nel terminale. Se il file c'è già, lo sovrascrive.",
+    "Usa i percorsi completi, o spostati prima in `/srv/esercizi` con `cd`: il file va creato proprio lì.",
+]
+
+[[exercises]]
+id = "redirect-stderr"
+title = "Separare gli errori dallo stdout con 2>"
+kind = "stato"
+task = '''
+Lo script `/srv/esercizi/controlla.sh` controlla dei servizi: scrive i controlli riusciti sullo
+**stdout** e gli errori sullo **stderr**. Lancialo una volta e salva le due cose in due file diversi:
+lo stdout in `/srv/esercizi/output.txt` e lo stderr in `/srv/esercizi/errori.txt`.
+'''
+hints = [
+    "Lancialo prima senza niente: nel terminale stdout e stderr si mescolano. Poi prova con `> output.txt`: quello che resta a schermo è lo stderr.",
+    "Lo stdout è il flusso numero 1, lo stderr il 2: `>` vale `1>`, e `2>` redirige gli errori. Nello stesso comando possono esserci tutti e due.",
+]
+
+[[exercises]]
+id = "dev-null"
+title = "Nascondere gli errori con 2>/dev/null"
+kind = "risposta"
+task = '''
+Lo script `/srv/esercizi/rumoroso.sh` stampa un solo risultato utile sullo **stdout**, una riga
+`codice: …`, sommerso da centinaia di avvisi sullo **stderr**: alcuni contengono anche dei codici vecchi.
+Lancialo buttando via lo stderr e scrivi il codice che resta.
+'''
+hints = [
+    "`/dev/null` è un file speciale che butta via tutto quello che ci scrivi.",
+    "Redirigi il flusso degli errori (il numero 2) su `/dev/null`: a schermo resta solo lo stdout.",
+]
+
+[[exercises]]
+id = "find-xargs"
+title = "Agire su tanti file insieme con find e xargs"
+kind = "stato"
+task = '''
+`/srv/esercizi/progetto` è pieno di file temporanei `.tmp`, sparsi in tante sottocartelle. Cancellali
+**tutti**, senza toccare nessun altro file: trovali con `find` e passa l'elenco a `rm` con `xargs`
+(o con `-exec` di `find`). Attento: uno dei file ha uno spazio nel nome.
+'''
+hints = [
+    "Prima guarda cosa cancelleresti: lancia solo la parte con `find`. Quando l'elenco è giusto, aggiungi la cancellazione.",
+    "`xargs` divide l'input agli spazi, quindi un nome con uno spazio diventa due nomi sbagliati. `find -print0` e `xargs -0` separano i nomi con un carattere che nei nomi non può esserci.",
+]

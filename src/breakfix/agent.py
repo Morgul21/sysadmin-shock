@@ -13,6 +13,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 from mcp.client.stdio import get_default_environment
@@ -52,7 +53,7 @@ Cose da sapere:
 Non dichiarare mai una correzione che non hai eseguito.
 Alla fine rispondi in italiano con: causa, correzione applicata, verifica (il comando e il suo esito)."""
 
-DEFAULT_MODELS = {"openai": "gpt-5.6-luna", "anthropic": "claude-opus-5-5", "ollama": "breakfix-qwen3"}
+DEFAULT_MODELS = {"openai": "gpt-5.6-luna", "anthropic": "claude-opus-5-5", "ollama": "breakfix-qwen3-8b"}
 API_KEY_VARS = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "google": "GOOGLE_API_KEY"}
 OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
@@ -60,7 +61,13 @@ OLLAMA_BASE_URL = "http://localhost:11434/v1"
 STATE_DIR = Path(__file__).resolve().parents[2] / ".breakfix"
 MEMORY_PATH = Path(os.getenv("BREAKFIX_MEMORY", STATE_DIR / "memory.json"))
 AUDIT_DIR = Path(os.getenv("BREAKFIX_AUDIT_DIR", STATE_DIR / "audit"))
-MAX_STEPS = 12
+# I modelli più grandi verificano di più prima di agire: qwen3.8-27b usa 10-14 passi dove l'8B ne usa 4-6.
+MAX_STEPS = int(os.getenv("BREAKFIX_MAX_STEPS", "20"))
+# Quante volte rilanciare un modello che si ferma con un testo che non è la risposta finale.
+MAX_NUDGES = 2
+NUDGE = ("Non hai ancora concluso: hai scritto il prossimo passo senza eseguirlo. Continua chiamando "
+         "exec_in_sandbox; quando il comando del ticket riesce, rispondi con causa, correzione applicata "
+         "e verifica.")
 # Il default di datapizza (2048) è poco per i modelli col thinking sempre attivo (es. Claude Opus 5.5).
 MAX_OUTPUT_TOKENS = 16000
 
@@ -75,9 +82,12 @@ def generation_kwargs() -> dict:
     return kwargs
 
 
-def build_llm_client():
-    provider = os.getenv("LLM_PROVIDER", "openai").lower()
-    model = os.getenv("LLM_MODEL") or DEFAULT_MODELS.get(provider)
+def build_llm_client(provider: str | None = None, model: str | None = None):
+    """Il client del modello: da LLM_PROVIDER / LLM_MODEL, oppure da argomenti (es. il giudice degli eval)."""
+    if provider is None:
+        provider, model = os.getenv("LLM_PROVIDER", "openai"), model or os.getenv("LLM_MODEL")
+    provider = provider.lower()
+    model = model or DEFAULT_MODELS.get(provider)
     if not model:
         sys.exit(f"Imposta LLM_MODEL per il provider {provider!r}")
     temperature = os.getenv("LLM_TEMPERATURE")
@@ -101,11 +111,12 @@ def build_llm_client():
 def mcp_server_client() -> MCPClient:
     """Avvia il server MCP come sottoprocesso stdio.
 
-    Al server passiamo solo l'ambiente minimo più le variabili BREAKFIX_*:
-    la API key del modello resta nel processo dell'agente.
+    Al server passiamo solo l'ambiente minimo più le variabili BREAKFIX_* e DOCKER_* (dove sta
+    il Docker delle sandbox, es. quello privato di compose.yaml): la API key del modello resta
+    nel processo dell'agente.
     """
     env = get_default_environment()
-    env.update({key: value for key, value in os.environ.items() if key.startswith("BREAKFIX_")})
+    env.update({key: value for key, value in os.environ.items() if key.startswith(("BREAKFIX_", "DOCKER_"))})
     return MCPClient(command=sys.executable, args=["-m", "breakfix.server"], env=env)
 
 
@@ -142,8 +153,44 @@ def _root_cause(exc: BaseException) -> BaseException:
     return exc
 
 
+def is_conclusion(text: str) -> bool:
+    """La risposta finale chiesta dal system prompt riporta la verifica: senza, non è una conclusione."""
+    return "verific" in text.lower()
+
+
+async def _run_until_concluded(task: str, client: Client, tools: list, memory: Memory) -> AgentRunnerResult:
+    """Il runner chiude al primo turno di solo testo. I modelli locali a volte ne scrivono uno a metà
+    lavoro ("Let's see how much memory is in use.") senza chiamare il tool: in quel caso li facciamo
+    continuare, nello stesso budget di passi."""
+    steps_left, prompt = MAX_STEPS, task
+    for _ in range(MAX_NUDGES + 1):
+        agent = Agent(name="fixer", client=client, system_prompt=SYSTEM_PROMPT, tools=tools,
+                      max_steps=steps_left, stateless=False)
+        result = await AgentRunner().a_run(agent, prompt, memory=memory, **generation_kwargs())
+        if result.final_step is None or is_conclusion(result.final_step.text):
+            break
+        steps_left -= result.final_step.index
+        if steps_left <= 0:
+            break
+        memory, prompt = result.memory, NUDGE
+    return result
+
+
+# Chi guarda il fixer mentre lavora (es. la pagina): riceve argomenti e risultato di ogni chiamata a un tool.
+ToolObserver = Callable[[dict[str, Any], str], None]
+
+
+def _observed(func: Callable, on_tool: ToolObserver) -> Callable:
+    async def observed(**kwargs):
+        result = await func(**kwargs)
+        on_tool(kwargs, result)
+        return result
+
+    return observed
+
+
 async def run_agent(
-    task: str, client: Client, memory: Memory, audit_dir: Path = AUDIT_DIR
+    task: str, client: Client, memory: Memory, audit_dir: Path = AUDIT_DIR, on_tool: ToolObserver | None = None
 ) -> tuple[AgentRunnerResult, Path]:
     """Esegue il fixer dentro un trace e ne salva l'audit, anche se l'esecuzione fallisce."""
     result = None
@@ -152,15 +199,10 @@ async def run_agent(
         try:
             async with mcp_server_client() as mcp:
                 tools = await mcp.a_list_tools()
-                agent = Agent(
-                    name="fixer",
-                    client=client,
-                    system_prompt=SYSTEM_PROMPT,
-                    tools=tools,
-                    max_steps=MAX_STEPS,
-                    stateless=False,
-                )
-                result = await AgentRunner().a_run(agent, task, memory=memory, **generation_kwargs())
+                if on_tool:
+                    for tool in tools:
+                        tool.func = _observed(tool.func, on_tool)
+                result = await _run_until_concluded(task, client, tools, memory)
         except Exception as exc:
             error = _root_cause(exc)
         # Va letto qui dentro: all'uscita dal trace ContextTracing scarta gli span.

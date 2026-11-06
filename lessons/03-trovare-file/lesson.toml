@@ -1,0 +1,44 @@
+title = "Trovare file con find e comandi con which"
+track = "orientarsi"
+man = ["find(1)", "which(1)"]
+
+[[exercises]]
+id = "find-name"
+title = "Trovare un file per nome con find -name"
+kind = "risposta"
+task = '''
+`/srv/esercizi/archivio` contiene una cartella per anno e, in ognuna, una per mese: sono decine di
+cartelle. In una sola c'è il file `trovami.txt`. Cercarlo a mano con `cd` e `ls` sarebbe lungo:
+trovalo con `find` e scrivi il percorso completo della cartella che lo contiene.
+'''
+hints = [
+    "`find` vuole prima la cartella da cui cercare, poi le condizioni: per cercare per nome la condizione è `-name`.",
+    "`find` stampa il percorso del file: la cartella che lo contiene è quel percorso senza `/trovami.txt` in fondo.",
+]
+
+[[exercises]]
+id = "find-user"
+title = "Trovare i file di un utente con find -user"
+kind = "risposta"
+task = '''
+`/srv/esercizi/condivisa` è una cartella condivisa da più utenti, con sottocartelle. Quanti **file**
+(non cartelle) appartengono all'utente `luca`, contando anche quelli nelle sottocartelle?
+'''
+hints = [
+    "La condizione di `find` per il proprietario è `-user`; quella per tenere solo i file è `-type f`.",
+    "Le condizioni si mettono una dopo l'altra e devono valere tutte. Per contare le righe che `find` stampa puoi contarle a occhio, o passarle a `wc -l` con una pipe (lezione 4).",
+]
+
+[[exercises]]
+id = "which"
+title = "Trovare dove sta un comando con which"
+kind = "risposta"
+task = '''
+Su questo server c'è un comando `saluta`: provalo scrivendo `saluta`. Un comando è un file eseguibile
+che sta in una delle cartelle elencate nella variabile `PATH` (`echo $PATH`). In quale file si trova
+`saluta`? Scrivi il percorso completo.
+'''
+hints = [
+    "`which comando` cerca il comando nelle cartelle del `PATH`, nell'ordine, e stampa il primo che trova.",
+    "Una copia di `saluta` c'è anche in `/srv/esercizi`, ma quella cartella non è nel `PATH`: non è quella che parte quando scrivi `saluta`.",
+]

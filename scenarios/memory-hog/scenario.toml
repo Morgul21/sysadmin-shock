@@ -2,10 +2,20 @@ title = "Processo che occupa la memoria"
 category = "memoria"
 difficulty = "media"
 man = ["ps(1)", "kill(1)", "proc(5)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [10]
 hints = [
     "Lancia `gestionale` e leggi l'errore: manca memoria. Il container ha un limite suo (`cat /sys/fs/cgroup/memory.max`): chi la sta usando?",
     "Ordina i processi per memoria residente con `ps aux --sort=-rss`: il primo non è l'app.",
     "Un job dei report (uno script Python in `/opt`) tiene occupati circa 200 MB. Va fermato quel processo, non il container (il processo 1).",
+]
+
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\b(?:pkill|killall)\s+(?:-\S+\s+)*\S*build-report',
+    '\bkill\s+(?:-\S+\s+)*\d+',
 ]
 
 [ticket]

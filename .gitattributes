@@ -3,3 +3,4 @@
 *.py text eol=lf
 sandbox/** text eol=lf
 scenarios/** text eol=lf
+lessons/** text eol=lf

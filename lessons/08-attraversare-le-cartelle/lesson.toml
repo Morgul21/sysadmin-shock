@@ -1,0 +1,53 @@
+title = "Controllare un percorso intero con ls -ld e namei"
+track = "permessi"
+man = ["namei(1)", "path_resolution(7)", "ls(1)"]
+
+[[exercises]]
+id = "ls-ld"
+title = "Leggere i permessi di una cartella con ls -ld"
+kind = "risposta"
+task = '''
+In `/srv/esercizi` ci sono tre cartelle, `alfa`, `beta` e `gamma`, tutte di `root`: per l'utente
+`app` contano quindi i permessi degli **altri**. Guardali con `ls -ld /srv/esercizi/*`.
+
+In una sola di queste cartelle `app` può **entrare** (`cd`, aprire un file di cui conosce il nome)
+ma **non elencarne** il contenuto (`ls`). Quale? Scrivi il nome della cartella.
+'''
+hints = [
+    "`ls -l cartella` mostra il contenuto; `ls -ld cartella` mostra la cartella stessa, con i suoi permessi.",
+    "Su una cartella `r` permette di elencare i nomi, `x` di entrarci e attraversarla. Cerca la terna degli altri con la `x` ma senza la `r`.",
+    "Per provarlo come app: `runuser -u app -- ls` seguito dalla cartella, e lo stesso con `cat` su un file dentro.",
+]
+
+[[exercises]]
+id = "namei"
+title = "Trovare la cartella che blocca un percorso con namei -l"
+kind = "risposta"
+task = '''
+Il file `/srv/esercizi/a/b/c/d/dati.txt` ha permessi `rw-r--r--`: tutti lo possono leggere. Eppure
+l'utente `app` riceve `Permission denied` (prova: `runuser -u app -- cat /srv/esercizi/a/b/c/d/dati.txt`).
+
+Per aprire un file servono i permessi giusti su **ogni** cartella del percorso. `namei -l` mostra i
+permessi di ogni pezzo del percorso, dalla radice al file. Quale cartella blocca `app`? Scrivi il suo
+percorso completo.
+'''
+hints = [
+    "`namei -l` seguito dal percorso del file stampa una riga per ogni cartella: permessi, proprietario, gruppo, nome.",
+    "Per attraversare una cartella serve la `x`. Le cartelle qui sono di root: per `app` conta l'ultima terna.",
+]
+
+[[exercises]]
+id = "sbloccare"
+title = "Rendere attraversabile un percorso con chmod sulle cartelle"
+kind = "stato"
+task = '''
+Come prima, l'utente `app` non riesce a leggere `/srv/esercizi/a/b/c/d/dati.txt` perché una
+cartella del percorso lo blocca. Trovala e sistemala: `app` deve poter leggere il file, dando a quella
+cartella **solo** il permesso che manca. Niente scrittura per gli altri, niente `chmod -R`.
+
+Verifica con `runuser -u app -- cat /srv/esercizi/a/b/c/d/dati.txt`.
+'''
+hints = [
+    "Prima trova la cartella con `namei -l`, come nell'esercizio precedente.",
+    "Per attraversare basta la `x`: aggiungila agli altri su quella sola cartella, con la notazione simbolica di `chmod`.",
+]

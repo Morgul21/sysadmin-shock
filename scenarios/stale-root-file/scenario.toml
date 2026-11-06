@@ -2,10 +2,20 @@ title = "Avvio manuale da root"
 category = "permessi"
 difficulty = "media"
 man = ["chown(1)", "ls(1)", "find(1)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [3, 4, 7]
 hints = [
     "Lancia `gestionale` e leggi l'errore: quale file non riesce a scrivere? Il ticket parla di un avvio fatto a mano: con quale utente?",
     "Guarda il proprietario dei file che l'app scrive (la directory dei dati è nella configurazione): `ls -l`, oppure `find /srv/app -user root` trova quelli di root.",
     "Il file `last-start` è stato creato da un avvio come root ed è rimasto di root: l'utente app non può più sovrascriverlo.",
+]
+
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\bch(?:own|grp)\s+(?:-\S+\s+)*\S+\s+\S*(?:last-start|/data/?)(?![\w-])',
+    '\b(?:rm|unlink)\s+(?:-\S+\s+)*\S*last-start',
 ]
 
 [ticket]

@@ -3,10 +3,20 @@ category = "memoria"
 difficulty = "difficile"
 # Nessun processo risulta grande: la memoria è nei file di /dev/shm (shmem nel cgroup).
 man = ["tmpfs(5)", "df(1)", "cgroups(7)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [11]
 hints = [
     "Lancia `gestionale` e leggi l'errore: manca memoria, ma `ps aux --sort=-rss` non mostra processi grandi.",
     "La memoria può essere occupata anche da file: i filesystem tmpfs vivono in RAM. `df -h` li elenca, e la riga shmem di `/sys/fs/cgroup/memory.stat` dice quanta ne usano.",
     "In `/dev/shm` c'è un file di export da circa 200 MB lasciato da un job: occupa RAM finché esiste.",
+]
+
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\b(?:rm|unlink)\s+(?:-\S+\s+)*\S*(?:report-export|/dev/shm/)',
+    '\btruncate\s[^\n]{0,40}(?:report-export|/dev/shm/)',
 ]
 
 [ticket]

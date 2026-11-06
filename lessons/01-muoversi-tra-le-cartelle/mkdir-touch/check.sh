@@ -1,0 +1,7 @@
+p="$EX/progetto"
+[ -d "$p" ] || fail "manca la cartella $p"
+[ -d "$p/documenti" ] || fail "manca la cartella $p/documenti"
+[ -d "$p/documenti/bozze" ] || fail "manca la cartella $p/documenti/bozze"
+[ -f "$p/leggimi.txt" ] || fail "manca il file $p/leggimi.txt"
+[ ! -s "$p/leggimi.txt" ] || fail "leggimi.txt doveva essere vuoto"
+pass "la struttura c'è: $(cd "$EX" && find progetto | sort | tr '\n' ' ')"

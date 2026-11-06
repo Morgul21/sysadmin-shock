@@ -1,0 +1,7 @@
+.venv/
+.git/
+.vscode/
+.breakfix/
+.env
+**/__pycache__/
+*.egg-info/

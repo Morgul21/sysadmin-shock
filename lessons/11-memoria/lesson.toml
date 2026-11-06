@@ -1,0 +1,56 @@
+title = "Misurare memoria e spazio con free, df, du e i cgroup"
+track = "processi e memoria"
+man = ["free(1)", "df(1)", "du(1)", "cgroups(7)", "tmpfs(5)"]
+
+[[exercises]]
+id = "free"
+title = "Leggere la memoria del sistema con free -m"
+kind = "risposta"
+task = '''
+Quanta memoria **totale** vede `free -m`? Scrivi il numero della colonna `total`, riga `Mem:`, in
+megabyte.
+'''
+hints = [
+    "`free -m` mostra la memoria in megabyte: la riga `Mem:` è la RAM, `Swap:` lo spazio di scambio su disco.",
+    "La colonna `total` è la prima con un numero.",
+]
+
+[[exercises]]
+id = "cgroup"
+title = "Trovare il limite di memoria vero nei cgroup"
+kind = "risposta"
+task = '''
+Il numero dell'esercizio precedente è la memoria della macchina che ospita il container: il container
+invece ha un **limite** suo, più basso, deciso da chi lo ha avviato. Il kernel lo applica con i
+**cgroup**, e si legge nel file `/sys/fs/cgroup/memory.max` (in byte). Quanti megabyte sono?
+'''
+hints = [
+    "`cat /sys/fs/cgroup/memory.max` stampa il limite in byte.",
+    "Un megabyte qui è 1024 × 1024 byte: dividi due volte per 1024. La shell sa fare i conti: `echo $(( numero / 1024 / 1024 ))`.",
+]
+
+[[exercises]]
+id = "df"
+title = "Vedere quanto è pieno un filesystem con df -h"
+kind = "risposta"
+task = '''
+`/dev/shm` è un filesystem **in memoria** (tmpfs): i file che ci sono dentro occupano RAM, non disco.
+Quanto è pieno in percentuale? Guardalo con `df -h /dev/shm` e scrivi il numero della colonna `Use%`.
+'''
+hints = [
+    "`df` mostra un filesystem per riga: dimensione, usato, disponibile, percentuale usata, dove è montato.",
+    "Scrivi il numero con o senza il simbolo `%`.",
+]
+
+[[exercises]]
+id = "du"
+title = "Trovare cosa occupa spazio con du -sh"
+kind = "risposta"
+task = '''
+`df` dice quanto è pieno un filesystem, non **cosa** lo riempie. In `/dev/shm/esportazioni` ci sono
+alcune cartelle: quale occupa più spazio? Misurale con `du` e scrivi il nome della cartella.
+'''
+hints = [
+    "`du -sh cartella` stampa lo spazio totale occupato da una cartella (`-s` il totale, `-h` in K, M, G).",
+    "Con `*` le misuri tutte insieme: `du -sh /dev/shm/esportazioni/*`.",
+]

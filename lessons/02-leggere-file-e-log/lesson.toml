@@ -1,0 +1,43 @@
+title = "Leggere file e log con cat, tail e grep"
+track = "orientarsi"
+man = ["cat(1)", "less(1)", "head(1)", "tail(1)", "grep(1)"]
+
+[[exercises]]
+id = "cat"
+title = "Leggere un file con cat"
+kind = "risposta"
+task = '''
+Il file `/srv/esercizi/messaggio.txt` contiene un breve messaggio, con dentro un codice.
+Stampalo nel terminale con `cat` e scrivi il codice.
+'''
+hints = [
+    "`cat` seguito dal percorso del file ne stampa tutto il contenuto.",
+    "Il codice è nella riga che comincia con `Il codice è:`. Scrivi solo il codice, senza il resto della riga.",
+]
+
+[[exercises]]
+id = "tail"
+title = "Leggere la fine di un log con tail"
+kind = "risposta"
+task = '''
+`/srv/esercizi/app.log` è un log di centinaia di righe: ogni riga è un evento, e i nuovi eventi
+vengono aggiunti in fondo. Con `tail` stampa solo le ultime righe: qual è l'`id` della richiesta
+nella **quintultima** riga (la quinta contando dalla fine)?
+'''
+hints = [
+    "`tail -n` seguito da un numero stampa quel numero di righe dalla fine: chiedine cinque, e la quintultima è la prima che vedi.",
+    "Ogni riga finisce con `id=` seguito da sei caratteri: scrivi solo quelli.",
+]
+
+[[exercises]]
+id = "grep"
+title = "Cercare righe in un file con grep"
+kind = "risposta"
+task = '''
+Nel log `/srv/esercizi/app.log` alcune righe segnalano un errore e contengono la parola `ERROR`.
+Quante sono? Contale con `grep` e scrivi il numero.
+'''
+hints = [
+    "`grep parola file` stampa solo le righe che contengono la parola.",
+    "`grep` ha un'opzione che, invece delle righe, stampa quante sono: guarda `grep --help` alla voce *count*.",
+]

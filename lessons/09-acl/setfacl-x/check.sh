@@ -1,0 +1,10 @@
+f="$EX/registro.log"
+[ "$(stat -c %U:%G "$f")" = root:tecnici ] || fail "proprietario e gruppo dovevano restare root:tecnici"
+runuser -u luca -- test -w "$f" || fail "luca non riesce ancora a scrivere in registro.log"
+acl=$(getfacl -p "$f" 2>/dev/null)
+echo "$acl" | grep -q '^user:luca:' && fail "nell'ACL c'è ancora una voce per luca: $(echo "$acl" | grep '^user:luca:')"
+echo "$acl" | grep -q '^user:anna:rw-' || fail "la voce di anna (rw-) è sparita: andava tolta solo quella di luca"
+echo "$acl" | grep -q '^user::rw-$' || fail "i permessi del proprietario sono cambiati"
+echo "$acl" | grep -q '^group::rw-$' || fail "i permessi del gruppo sono cambiati"
+echo "$acl" | grep -q '^other::r--$' || fail "i permessi degli altri sono cambiati"
+pass "luca scrive di nuovo grazie al gruppo, e la voce di anna è rimasta"

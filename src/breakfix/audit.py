@@ -69,8 +69,12 @@ def write_run(
     model: str,
     final_answer: str | None,
     error: str | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> Path:
-    """Scrive l'audit di un'esecuzione e restituisce il percorso del file."""
+    """Scrive l'audit di un'esecuzione e restituisce il percorso del file.
+
+    `extra`: campi propri di un agente (es. per il tutor la risposta bloccata dal guardrail di output).
+    """
     records = sorted((_span_record(s) for s in spans), key=lambda r: r["start"] or "")
     written_at = datetime.now(timezone.utc)
     trace_hex = f"{trace_id:032x}"
@@ -82,6 +86,7 @@ def write_run(
         "status": "ok" if final_answer is not None and error is None else "error",
         "error": error,
         "final_answer": final_answer,
+        **(extra or {}),
         "summary": _summary(records),
         "spans": records,
     }

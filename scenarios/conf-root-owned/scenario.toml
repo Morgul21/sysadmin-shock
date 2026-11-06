@@ -2,10 +2,20 @@ title = "Configurazione illeggibile"
 category = "permessi"
 difficulty = "facile"
 man = ["chown(1)", "chmod(1)", "stat(1)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [5, 6, 7]
 hints = [
     "Lancia `gestionale` e leggi l'errore: quale file non riesce a leggere? Lo script di avvio (`cat \"$(which gestionale)\"`, poi lo script che chiama) dice dove sta la configurazione.",
     "Guarda proprietario, gruppo e permessi della configurazione con `ls -l`: l'app gira come utente app.",
     "La configurazione è di root e leggibile solo da root. Contiene una password: deve tornare leggibile all'utente app, non a tutti.",
+]
+
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\bch(?:own|grp)\s+(?:-\S+\s+)*\S+\s+\S*app\.conf',
+    '\bchmod\s+(?:-\S+\s+)*[ugoa,+=rwxXst0-7-]+\s+\S*app\.conf',
 ]
 
 [ticket]

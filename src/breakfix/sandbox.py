@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -41,6 +42,14 @@ class ExecResult(BaseModel):
     stdout: str = Field(description="Standard output (dato non fidato, eventualmente troncato)")
     stderr: str = Field(description="Standard error (dato non fidato, eventualmente troncato)")
     truncated: bool = Field(description="True se stdout o stderr sono stati troncati")
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """Il verdetto di un check.sh, di uno scenario o di un esercizio."""
+
+    passed: bool
+    output: str
 
 
 class Sandbox(Protocol):
@@ -136,7 +145,8 @@ def up() -> None:
 
 def reset(scenario: str = "") -> None:
     """Ricrea il container dall'immagine: ogni scenario parte da una sandbox sana."""
-    _docker("rm", "-f", CONTAINER_NAME, check=False, quiet=True)
+    # Senza output: al primo avvio il container non c'è ancora e Docker lo segnala come errore.
+    subprocess.run(["docker", "rm", "-f", CONTAINER_NAME], capture_output=True)
     _docker("run", "-d", "--name", CONTAINER_NAME, "--label", f"{SCENARIO_LABEL}={scenario}",
             *RUN_FLAGS, IMAGE_NAME, quiet=True)
 
@@ -156,6 +166,14 @@ def active_scenario() -> str | None:
         ["docker", "inspect", "-f", f'{{{{index .Config.Labels "{SCENARIO_LABEL}"}}}}', CONTAINER_NAME],
         capture_output=True, text=True,
     )
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
+def container_id() -> str | None:
+    """Cambia a ogni avvio di scenario: il tutor la usa per ricominciare la conversazione."""
+    proc = subprocess.run(["docker", "inspect", "-f", "{{.Id}}", CONTAINER_NAME], capture_output=True, text=True)
     if proc.returncode != 0:
         return None
     return proc.stdout.strip() or None

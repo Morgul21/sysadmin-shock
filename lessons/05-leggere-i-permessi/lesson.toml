@@ -1,0 +1,56 @@
+title = "Leggere i permessi con ls, stat e id"
+track = "permessi"
+man = ["ls(1)", "stat(1)", "id(1)", "runuser(1)"]
+
+[[exercises]]
+id = "terna-proprietario"
+title = "Leggere i permessi del proprietario con ls -l"
+kind = "risposta"
+task = '''
+Nella cartella `/srv/esercizi` ci sono cinque file: `uno.sh`, `due.sh`, `tre.sh`, `quattro.sh` e
+`cinque.sh`. Elencali in formato lungo con `ls -l /srv/esercizi`: ogni riga è un file, e la prima
+colonna sono i suoi permessi.
+
+Guarda in ogni riga i caratteri dal 2 al 4: sono i permessi del **proprietario**. Un solo file non
+ha la `x` in quella terna, cioè il proprietario non lo può eseguire. Quale? Scrivi il nome del file.
+'''
+hints = [
+    "Una riga di `ls -l` comincia così: `-rwxr-x---`. Il primo carattere è il tipo (`-` = file), poi vengono tre terne: proprietario, gruppo, altri.",
+    "Ti interessa solo la prima terna. La `x` è il suo terzo carattere: cerca la riga in cui al suo posto c'è un `-`.",
+]
+
+[[exercises]]
+id = "proprietario-gruppo"
+title = "Vedere proprietario e gruppo di un file con ls -l"
+kind = "risposta"
+task = '''
+Ogni file appartiene a un **utente** (il proprietario) e a un **gruppo**. Nella cartella
+`/srv/esercizi` ci sono quattro file di testo. Elencali con `ls -l /srv/esercizi`: dopo i permessi e un
+numero ci sono due nomi, prima il proprietario e poi il gruppo.
+
+Un solo file appartiene al gruppo `tecnici`. Quale? Scrivi il nome del file.
+'''
+hints = [
+    "Nella riga `-rw-r----- 1 anna ufficio 0 nov 5 10:00 a.txt` il proprietario è `anna` e il gruppo è `ufficio`.",
+    "C'è un utente, `luca`, che fa parte del gruppo `tecnici` (lo vedi con `id luca`). Ma conta il gruppo scritto sul file, non quello di chi lo possiede.",
+]
+
+[[exercises]]
+id = "chi-legge"
+title = "Capire chi può leggere un file con stat e id"
+kind = "risposta"
+task = '''
+Quando un utente apre un file, Linux usa **una sola** delle tre terne: quella del proprietario se
+l'utente è il proprietario, altrimenti quella del gruppo se è nel gruppo, altrimenti quella degli altri.
+
+`stat /srv/esercizi/nota.txt` mostra permessi, proprietario e gruppo del file (righe `Access` e `Uid`/`Gid`).
+`id app` mostra l'utente `app` e i gruppi in cui è. Con questi due comandi decidi: `app` può leggere
+`nota.txt`? Rispondi `si` o `no`.
+
+Per controllare, prova a leggerlo come `app`: `runuser -u app -- cat /srv/esercizi/nota.txt`.
+'''
+hints = [
+    "Prima domanda: `app` è il proprietario del file? Se sì, conta solo la prima terna.",
+    "Se non è il proprietario: `app` è nel gruppo del file? Se sì, conta la seconda terna; altrimenti la terza.",
+    "Le terne non si sommano: un proprietario con `---` non legge il file, anche se gli altri hanno `r--`.",
+]

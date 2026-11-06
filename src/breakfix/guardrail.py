@@ -3,7 +3,7 @@
 Non è il confine di sicurezza (quello è il container: niente rete, limiti di memoria e
 processi). È la policy che vieta a chi usa il tool le "riparazioni" che un sistemista non
 farebbe mai (chmod 777, setuid) e i comandi che distruggono la sandbox invece di ripararla.
-Sta nel server MCP, quindi vale per qualunque host: il nostro agente, Claude Desktop, ...
+Sta nel server MCP, quindi vale per qualunque host MCP che usi il tool, non solo per il fixer.
 
 Una denylist si aggira costruendo il comando a runtime (eval, base64, `| sh`): per questo
 blocchiamo anche quei costrutti, a costo di qualche falso positivo.
@@ -48,7 +48,8 @@ RAW_RULES = [
         "comando-dinamico",
         re.compile(r"\beval\b|\bbase64\s+(-d|--decode)\b|\|\s*(ba|da)?sh\b|\b(ba|da)?sh\s+-c\b"
                    r"|\b(python3?|perl)\s+-[ce]\b"),
-        "il comando viene costruito a runtime (eval, base64, | sh, -c): non è validabile",
+        "il comando viene costruito a runtime (eval, base64, | sh, -c): non è validabile; "
+        "lancia i comandi direttamente, uno per segmento (es. `runuser -u app -- touch FILE`)",
     ),
     ("fork-bomb", re.compile(r":\s*\(\s*\)\s*\{"), "fork bomb"),
     (

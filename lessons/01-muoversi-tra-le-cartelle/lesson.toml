@@ -1,0 +1,46 @@
+title = "Muoversi tra le cartelle con pwd, cd e ls"
+track = "orientarsi"
+man = ["pwd(1)", "cd(1p)", "ls(1)", "mkdir(1)", "touch(1)"]
+
+[[exercises]]
+id = "contare-con-ls"
+title = "Elencare il contenuto di una cartella con ls"
+kind = "risposta"
+task = '''
+Nella cartella `/srv/esercizi` ci sono dei file e delle cartelle. Elencali con `ls /srv/esercizi`:
+quanti elementi (file più cartelle) mostra `ls`? Scrivi il numero.
+'''
+hints = [
+    "`ls` scrive i nomi uno accanto all'altro: se ti confondi, `ls -l` ne mette uno per riga.",
+    "Con `ls -l` la prima riga è `total …`: non è un file, non va contata.",
+]
+
+[[exercises]]
+id = "file-nascosti"
+title = "Vedere i file nascosti con ls -a"
+kind = "risposta"
+task = '''
+In `/srv/esercizi` c'è un file che `ls` non mostra: i file il cui nome comincia con un punto sono
+**nascosti**. Trovalo con l'opzione di `ls` che mostra tutto e scrivi il suo nome (punto compreso).
+'''
+hints = [
+    "L'opzione è `-a` (*all*): `ls -a /srv/esercizi`.",
+    "`.` e `..` compaiono sempre: sono la cartella stessa e quella che la contiene, non sono file.",
+]
+
+[[exercises]]
+id = "mkdir-touch"
+title = "Creare cartelle e file con mkdir e touch"
+kind = "stato"
+task = '''
+Crea questa struttura dentro `/srv/esercizi`:
+
+- la cartella `progetto`, con dentro la cartella `documenti`, con dentro la cartella `bozze`
+- un file vuoto `leggimi.txt` dentro `progetto`
+
+Alla fine `ls -R /srv/esercizi/progetto` deve mostrare tutto.
+'''
+hints = [
+    "`mkdir` crea una cartella, `touch` un file vuoto. Puoi lavorare con i percorsi completi o spostarti con `cd`.",
+    "`mkdir` crea una cartella alla volta, a meno che tu non gli chieda di creare anche quelle intermedie: guarda `mkdir --help`.",
+]

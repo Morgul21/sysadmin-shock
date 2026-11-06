@@ -3,10 +3,19 @@ category = "permessi"
 difficulty = "difficile"
 # ls -l mostra il log scrivibile dal gruppo app: la causa si vede solo con getfacl.
 man = ["acl(5)", "getfacl(1)", "setfacl(1)"]
+# Le lezioni delle basi che preparano a questo ticket.
+lessons = [9]
 hints = [
     "Lancia `gestionale`: questa volta il problema è il log. Dove scrive l'app? Lo dicono lo script di avvio e l'unità in `/etc/systemd/system/`.",
     "`ls -l` dice che il gruppo app può scrivere il log, eppure non può. Il `+` dopo i permessi indica una ACL: leggila con `getfacl`.",
     "Una ACL per l'utente app gli concede solo la lettura, e vale più dei permessi del gruppo. Va tolta quella regola: il log deve restare root:app, cambiare il proprietario non è la correzione giusta.",
+]
+
+# Guardrail di output del tutor: regex (senza distinzione di maiuscole) dei comandi che svelerebbero
+# la correzione, anche diversa da fix.sh. Ogni riga di fix.sh deve corrispondere a una regola,
+# nessun indizio deve corrispondere (tests/test_tutor.py).
+spoilers = [
+    '\bsetfacl\s[^\n]{0,80}app\.log',
 ]
 
 [ticket]
