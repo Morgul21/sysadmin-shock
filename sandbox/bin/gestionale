@@ -1,7 +1,13 @@
 #!/bin/sh
 # Avvia il gestionale con l'utente di servizio, come fa il servizio (vedi gestionale.service).
 # Se l'avvio fallisce, l'errore finisce anche nel log del servizio.
-out=$(runuser -u app -- /srv/app/run.sh 2>&1)
+# Da root passa all'utente app; chi è già app (es. `su - app -c gestionale`) lo lancia direttamente,
+# altrimenti runuser fallirebbe ("may not be used by non-root users") nascondendo l'errore vero.
+if [ "$(id -u)" -eq 0 ]; then
+    out=$(/usr/sbin/runuser -u app -- /srv/app/run.sh 2>&1)
+else
+    out=$(/srv/app/run.sh 2>&1)
+fi
 rc=$?
 [ -n "$out" ] && printf '%s\n' "$out"
 if [ "$rc" -ne 0 ]; then

@@ -60,7 +60,13 @@ OLLAMA_BASE_URL = "http://localhost:11434/v1"
 STATE_DIR = Path(__file__).resolve().parents[2] / ".breakfix"
 MEMORY_PATH = Path(os.getenv("BREAKFIX_MEMORY", STATE_DIR / "memory.json"))
 AUDIT_DIR = Path(os.getenv("BREAKFIX_AUDIT_DIR", STATE_DIR / "audit"))
-MAX_STEPS = 12
+# I modelli più grandi verificano di più prima di agire: qwen3.8-27b usa 10-14 passi dove l'8B ne usa 4-6.
+MAX_STEPS = int(os.getenv("BREAKFIX_MAX_STEPS", "20"))
+# Quante volte rilanciare un modello che si ferma con un testo che non è la risposta finale.
+MAX_NUDGES = 2
+NUDGE = ("Non hai ancora concluso: hai scritto il prossimo passo senza eseguirlo. Continua chiamando "
+         "exec_in_sandbox; quando il comando del ticket riesce, rispondi con causa, correzione applicata "
+         "e verifica.")
 # Il default di datapizza (2048) è poco per i modelli col thinking sempre attivo (es. Claude Opus 5.5).
 MAX_OUTPUT_TOKENS = 16000
 
@@ -145,6 +151,29 @@ def _root_cause(exc: BaseException) -> BaseException:
     return exc
 
 
+def is_conclusion(text: str) -> bool:
+    """La risposta finale chiesta dal system prompt riporta la verifica: senza, non è una conclusione."""
+    return "verific" in text.lower()
+
+
+async def _run_until_concluded(task: str, client: Client, tools: list, memory: Memory) -> AgentRunnerResult:
+    """Il runner chiude al primo turno di solo testo. I modelli locali a volte ne scrivono uno a metà
+    lavoro ("Let's see how much memory is in use.") senza chiamare il tool: in quel caso li facciamo
+    continuare, nello stesso budget di passi."""
+    steps_left, prompt = MAX_STEPS, task
+    for _ in range(MAX_NUDGES + 1):
+        agent = Agent(name="fixer", client=client, system_prompt=SYSTEM_PROMPT, tools=tools,
+                      max_steps=steps_left, stateless=False)
+        result = await AgentRunner().a_run(agent, prompt, memory=memory, **generation_kwargs())
+        if result.final_step is None or is_conclusion(result.final_step.text):
+            break
+        steps_left -= result.final_step.index
+        if steps_left <= 0:
+            break
+        memory, prompt = result.memory, NUDGE
+    return result
+
+
 async def run_agent(
     task: str, client: Client, memory: Memory, audit_dir: Path = AUDIT_DIR
 ) -> tuple[AgentRunnerResult, Path]:
@@ -155,15 +184,7 @@ async def run_agent(
         try:
             async with mcp_server_client() as mcp:
                 tools = await mcp.a_list_tools()
-                agent = Agent(
-                    name="fixer",
-                    client=client,
-                    system_prompt=SYSTEM_PROMPT,
-                    tools=tools,
-                    max_steps=MAX_STEPS,
-                    stateless=False,
-                )
-                result = await AgentRunner().a_run(agent, task, memory=memory, **generation_kwargs())
+                result = await _run_until_concluded(task, client, tools, memory)
         except Exception as exc:
             error = _root_cause(exc)
         # Va letto qui dentro: all'uscita dal trace ContextTracing scarta gli span.

@@ -79,6 +79,9 @@ class TerminalSession:
         sock = self.api.exec_start(self.exec_id, socket=True, tty=True)
         # Linux/macOS: un SocketIO attorno al socket; Windows: direttamente la NpipeSocket.
         self.sock = getattr(sock, "_sock", sock)
+        # Con socket=True docker-py lascia al socket il timeout del client (60 s): un terminale fermo
+        # (nessun output, es. mentre si legge il ticket) farebbe scadere la recv e chiudere la sessione.
+        self.sock.settimeout(None)
         self.resize(cols, rows)
 
     def read(self) -> bytes:

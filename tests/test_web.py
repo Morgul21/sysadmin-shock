@@ -209,6 +209,17 @@ class TerminalTest(unittest.TestCase):
             with client.websocket_connect("/ws/terminal") as ws:
                 self.assertIn("Sandbox non raggiungibile", ws.receive_text())
 
+    def test_idle_terminal_does_not_time_out(self) -> None:
+        # Il socket di exec_start(socket=True) arriva col timeout del client Docker (60 s): un terminale
+        # senza output per un minuto si chiudeva da solo.
+        sock = mock.Mock(spec=["recv", "sendall", "settimeout", "close"])
+        api = mock.Mock()
+        api.exec_create.return_value = {"Id": "exec"}
+        api.exec_start.return_value = sock
+        with mock.patch.object(web.docker, "from_env", return_value=mock.Mock(api=api)):
+            web.TerminalSession(80, 24)
+        sock.settimeout.assert_called_once_with(None)
+
 
 if __name__ == "__main__":
     unittest.main()

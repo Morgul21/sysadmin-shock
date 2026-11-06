@@ -277,6 +277,7 @@ sandbox), quindi le serve un Docker. Le strade sono due:
 | `LLM_TEMPERATURE` | non inviata | da impostare solo per modelli che la supportano |
 | `BREAKFIX_SANDBOX` | `docker` | `mock` per test/demo senza Docker |
 | `BREAKFIX_AUDIT_DIR` | `.breakfix/audit` | dove salvare l'audit trail |
+| `BREAKFIX_MAX_STEPS` | `20` | passi massimi del fixer (chiamate al modello) prima di fermarsi |
 | `BREAKFIX_UI_HOST` | `127.0.0.1` (`0.0.0.0` nel container) | indirizzo su cui ascolta la UI |
 | `JUDGE_PROVIDER` / `JUDGE_MODEL` | quelli del tutor | il giudice di `breakfix-tutor-eval`: meglio un modello più forte |
 

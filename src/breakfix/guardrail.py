@@ -48,7 +48,8 @@ RAW_RULES = [
         "comando-dinamico",
         re.compile(r"\beval\b|\bbase64\s+(-d|--decode)\b|\|\s*(ba|da)?sh\b|\b(ba|da)?sh\s+-c\b"
                    r"|\b(python3?|perl)\s+-[ce]\b"),
-        "il comando viene costruito a runtime (eval, base64, | sh, -c): non è validabile",
+        "il comando viene costruito a runtime (eval, base64, | sh, -c): non è validabile; "
+        "lancia i comandi direttamente, uno per segmento (es. `runuser -u app -- touch FILE`)",
     ),
     ("fork-bomb", re.compile(r":\s*\(\s*\)\s*\{"), "fork bomb"),
     (
