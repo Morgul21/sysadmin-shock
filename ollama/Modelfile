@@ -1,4 +1,4 @@
-# Modello locale per l'agente: qwen3 4B "instruct" (risponde senza thinking) con un contesto più ampio.
+# Alternativa più leggera all'8B: qwen3 4B "instruct" (risponde senza thinking), più veloce ma meno affidabile come tutor.
 # Ollama parte da 4096 token e, quando sfora, scarta l'inizio della conversazione
 # (system prompt compreso) senza avvisare: con l'output dei comandi succede presto.
 #

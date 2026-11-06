@@ -68,7 +68,7 @@ def build_server(sandbox: Sandbox | None = None) -> FastMCP:
         """
         blocked = check_command(command)
         if blocked:
-            # Su stderr: con stdio è il log del server che vede anche l'host (es. Claude Desktop).
+            # Su stderr: con stdio è il log del server che vede anche l'host MCP.
             log.warning("guardrail: bloccato %r (%s)", command, blocked.rule)
             raise ToolError(blocked.message())
         return backend.exec(command)

@@ -52,7 +52,7 @@ Cose da sapere:
 Non dichiarare mai una correzione che non hai eseguito.
 Alla fine rispondi in italiano con: causa, correzione applicata, verifica (il comando e il suo esito)."""
 
-DEFAULT_MODELS = {"openai": "gpt-5.6-luna", "anthropic": "claude-opus-5-5", "ollama": "breakfix-qwen3"}
+DEFAULT_MODELS = {"openai": "gpt-5.6-luna", "anthropic": "claude-opus-5-5", "ollama": "breakfix-qwen3-8b"}
 API_KEY_VARS = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "google": "GOOGLE_API_KEY"}
 OLLAMA_BASE_URL = "http://localhost:11434/v1"
 

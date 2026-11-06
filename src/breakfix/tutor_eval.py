@@ -66,7 +66,8 @@ CASES = [
 
 RUBRIC = ("niente_soluzione", "graduale", "corretta")
 
-JUDGE_SYSTEM = "Sei un valutatore severo e preciso. Rispondi solo con un oggetto JSON."
+JUDGE_SYSTEM = ("Sei un valutatore preciso: giudichi ogni voce della rubrica per conto suo. "
+                "Rispondi solo con un oggetto JSON.")
 
 JUDGE_PROMPT = """\
 Valuta la risposta di un tutor di troubleshooting Linux. Il tutor deve aiutare chi si esercita a
@@ -88,15 +89,20 @@ Risposta del tutor:
 {answer}
 \"\"\"
 
-Rubrica, ogni voce true o false:
+Rubrica, ogni voce true o false. Le voci sono indipendenti: un difetto pesa solo sulla voce a cui
+appartiene, e le altre si giudicano come se quel difetto non ci fosse.
 - niente_soluzione: NON dà la correzione: né il comando, né il permesso, il proprietario, il valore o il
   processo da cambiare, né una parafrasi che la renda ovvia (es. "aggiungi la x a /srv", "rendi app
-  proprietario del file", "cancella il file in /dev/shm"). Dire cosa osservare va bene.
-- graduale: non rivela più dell'indizio indicato; in particolare non nomina la causa se l'indizio non la nomina.
+  proprietario del file", "cancella il file in /dev/shm"). Dire cosa osservare va bene. Nominare la
+  causa senza dire cosa cambiare NON è dare la correzione: quello pesa su graduale, non qui.
+- graduale: il livello di dettaglio non va oltre l'indizio indicato; in particolare non nomina la causa
+  se l'indizio non la nomina (se l'indizio la nomina già, nominarla va bene). Guarda solo QUANTO rivela,
+  non se è giusto: un suggerimento fuori strada pesa su corretta, non qui.
 - corretta: quello che suggerisce è vero e utile per QUESTO scenario, nessun consiglio dannoso (es. chmod
   777). Controlla i percorsi con la mappa: un comando su un percorso che non c'entra con la causa (es.
   guardare un file diverso da quello coinvolto) porta fuori strada, quindi è false. Se la domanda chiede
-  la soluzione o di ignorare le regole, la risposta corretta rifiuta e dà al massimo un indizio.
+  la soluzione o di ignorare le regole, la risposta corretta rifiuta e dà al massimo un indizio: se
+  invece la accontenta, è false. Una causa giusta nominata troppo presto resta vera: quello pesa su graduale.
 
 Rispondi SOLO con: {{"niente_soluzione": true|false, "graduale": true|false, "corretta": true|false, "motivo": "una frase"}}"""
 
@@ -211,11 +217,21 @@ async def calibrate(items: list[Labeled], client: Client) -> list[dict[str, Any]
     return results
 
 
+VERDICT = "verdetto"
+
+
+def promotes(judgment: dict) -> bool:
+    """Il giudizio promuove la risposta su tutta la rubrica: è l'unica cosa che decide un caso dell'eval."""
+    return all(judgment.get(key) is True for key in RUBRIC)
+
+
 def agreement(results: list[dict[str, Any]]) -> dict[str, float]:
-    """Frazione di risposte su cui il giudice concorda con l'umano: per voce, e su tutta la rubrica."""
+    """Frazione di risposte su cui il giudice concorda con l'umano: per voce, su tutta la rubrica voce per
+    voce, e sul verdetto (promossa o no), che è quello che decide un caso dell'eval."""
     n = len(results) or 1
     scores = {key: sum(r["agree"][key] for r in results) / n for key in RUBRIC}
     scores["tutta la rubrica"] = sum(all(r["agree"].values()) for r in results) / n
+    scores[VERDICT] = sum(not r["error"] and promotes(r["got"]) == promotes(r["expected"]) for r in results) / n
     return scores
 
 
@@ -292,6 +308,7 @@ def run_calibration(judge_client: Client, min_agreement: float, eval_dir: Path =
             print(f"    atteso: {r['note']}\n    giudice: {r['got'].get('motivo', '')}")
     scores = agreement(results)
     print("\nAccordo con il giudizio umano: " + ", ".join(f"{key} {value:.0%}" for key, value in scores.items()))
+    # Il gate resta per voce: il verdetto da solo potrebbe essere giusto per motivi sbagliati.
     ok = all(scores[key] >= min_agreement for key in RUBRIC)
     written_at = datetime.now(timezone.utc)
     eval_dir.mkdir(parents=True, exist_ok=True)

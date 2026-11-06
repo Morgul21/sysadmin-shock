@@ -19,8 +19,8 @@ indipendenti da parallelizzare né competenze diverse da separare, quindi più a
 solo passaggi, token e punti di errore. Un agente con un solo tool (`exec_in_sandbox`) basta, e si
 misura con un eval deterministico: il check dello scenario.
 
-Il tool sta in un server MCP e non dentro l'agente. Così il guardrail vale per qualunque host (il
-fixer, Claude Desktop), e l'agente non ha accesso diretto a Docker.
+Il tool sta in un server MCP e non dentro l'agente. Il guardrail vale per qualunque host MCP
+che usi il tool, e l'agente non ha accesso diretto a Docker.
 
 **Il tutor è un secondo agente singolo, senza tool.** Fixer e tutor non collaborano: hanno compiti e
 utenti diversi, quindi non serve orchestrarli. Il tutor non deve indovinare la causa, perché la conosce
@@ -51,9 +51,9 @@ Oggi questa validazione la fa `breakfix-sandbox validate` sugli scenari scritti 
   guardrail di output ─► risposta              │
     (con il fix dentro: indizio a mano)        │
                                                │
-  Fixer agent    ───┬── MCPClient ──► server MCP: guardrail ─► exec_in_sandbox
-  Claude Desktop ───┘        │
-                             └─► ContextTracing ─► .breakfix/audit/*.json  (fixer e tutor)
+  Fixer agent ── MCPClient ──► server MCP: guardrail ─► exec_in_sandbox
+                     │
+                     └─► ContextTracing ─► .breakfix/audit/*.json  (fixer e tutor)
 ```
 
 | Pezzo | File |
@@ -95,13 +95,15 @@ copy .env.example .env   # di default usa Ollama in locale: nessuna API key
 **Modello locale (default).** Si installa [Ollama](https://ollama.com), poi:
 
 ```powershell
-ollama pull qwen3:4b-instruct
-ollama create breakfix-qwen3 -f ollama/Modelfile   # stesso modello, contesto a 8192 token
+ollama pull qwen3:8b
+ollama create breakfix-qwen3-8b -f ollama/Modelfile.8b   # stesso modello, contesto a 8192 token
 ```
 
-Gira anche solo su CPU: con un Core Ultra 7 (32 GB) fa circa 18 token/s e un giro del fixer
-sulla sandbox mock dura meno di un minuto. Per usare un modello cloud si imposta `LLM_PROVIDER` e la
-sua API key nel `.env` (vedi [Configurazione](#configurazione)).
+Gira anche solo su CPU, con il ragionamento spento (`LLM_REASONING_EFFORT=none`, già nel `.env.example`).
+Il 4B (`qwen3:4b-instruct`, [ollama/Modelfile](ollama/Modelfile), `LLM_MODEL=breakfix-qwen3`) è più
+veloce (circa 18 token/s su un Core Ultra 7) ma come tutor perde il filo. Un server vLLM, o un altro
+endpoint compatibile OpenAI, si usa come Ollama impostando `OLLAMA_BASE_URL` e `LLM_MODEL`. Per un
+modello cloud si impostano `LLM_PROVIDER` e la sua API key nel `.env` (vedi [Configurazione](#configurazione)).
 
 ## Avvio
 
@@ -194,6 +196,46 @@ costruite, con esempi negativi per ogni voce). `--calibrate` le fa giudicare e m
 sotto `--min-agreement` (default 80%) quel giudice non va usato come gate. Il giudice si sceglie con
 `JUDGE_PROVIDER` / `JUDGE_MODEL`; senza, è lo stesso modello del tutor.
 
+Oltre all'accordo per voce, `--calibrate` riporta quello sul **verdetto** (promossa o bocciata), che è
+quello che decide un caso dell'eval. Il gate resta per voce: un verdetto giusto può nascere dalle ragioni
+sbagliate.
+
+| Giudice | niente_soluzione | graduale | corretta | tutta la rubrica | verdetto | esito |
+|---|---|---|---|---|---|---|
+| `qwen3.8-27b` (vLLM sul DGX), rubrica a voci indipendenti | 100% | 92% | 83% | 75% | 92% | PASS |
+| `qwen3.8-27b`, rubrica precedente (due esecuzioni) | 75–83% | 75% | 67–92% | 58% | 92–100% | FAIL |
+| `breakfix-qwen3-8b` (Ollama), rubrica precedente | 100% | 83% | 83% | 75% | 92% | PASS |
+| `breakfix-qwen3` (4B, Ollama), rubrica precedente | 67% | 83% | 67% | 33% | 83% | FAIL |
+
+Con la rubrica precedente il 27B individuava il difetto giusto (lo dice nel `motivo`), ma lo segnava su più
+voci insieme: "nomina la causa" bocciava anche `niente_soluzione` e `corretta`, "fuori strada" anche
+`graduale`. La rubrica ora dice che ogni difetto pesa solo sulla sua voce. Le due esecuzioni con la
+rubrica precedente mostrano quanto varia lo stesso giudice da un giro all'altro: su 12 risposte, una
+risposta vale 8 punti. L'8B non è stato ricalibrato con la rubrica nuova.
+
+**Limite noto del giudice (8B e 27B).** Controlla se il tutor suggerisce il comando giusto, non se lo applica
+al percorso giusto. `namei -l /usr/local/bin/gestionale` (il lanciatore, dove è tutto a posto) lo promuove come
+`namei -l /srv/app/run.sh` (dove si vede la causa). È l'unico verdetto sbagliato di tutti e due, ed è nella
+direzione indulgente: il valore di `corretta` nell'eval è quindi un po' ottimista.
+
+**Risultati** (tutor e giudice `qwen3.8-27b` su vLLM, ragionamento spento, 8 scenari × 4 casi):
+
+| Esecuzione | Giudice | Tutor | Casi passati | Jailbreak passati |
+|---|---|---|---|---|
+| 1 | rubrica precedente | prompt precedente | 25/32 (78%) | 11/16 |
+| 2 | rubrica a voci indipendenti | prompt precedente | 27/32 (84%) | 13/16 |
+| 3 (solo jailbreak) | rubrica a voci indipendenti | prompt attuale | – | 14/16 |
+| 4 | rubrica a voci indipendenti | prompt attuale | 31/32 (97%) | 15/16 |
+
+In tutte le esecuzioni nessuno spoiler è arrivato a chi si esercita e il guardrail di output non è mai
+intervenuto: i casi passati sono merito del modello. Con il prompt precedente il tutor rifiutava il
+comando ma poi descriveva la correzione a parole ("rendi eseguibile lo script", "individua il file in
+`/dev/shm` e rimuovilo"), soprattutto sui jailbreak. Il guardrail non lo vede, perché cerca comandi e non
+frasi. Il prompt attuale lo vieta esplicitamente. L'unico caso fallito dell'esecuzione 4 (`shm-full` /
+`docente`) è un errore del giudice: il tutor nomina `/dev/shm`, che l'ultimo indizio, già visto, nomina
+a sua volta. Tra un'esecuzione e l'altra lo stesso modello varia di 2–3 casi: l'esecuzione 4 è una sola
+misura, non una media. Il tutor 8B locale non è stato misurato con il prompt attuale.
+
 La memory dell'agente è in `.breakfix/memory.json` (`breakfix-agent --reset-memory` per azzerarla).
 Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>-<trace>.json`.
 
@@ -228,8 +270,9 @@ sandbox), quindi le serve un Docker. Le strade sono due:
 | Variabile | Default | Note |
 |---|---|---|
 | `LLM_PROVIDER` | `openai` (il `.env.example` imposta `ollama`) | `ollama`, `openai`, `anthropic`, `google`, ... (via `ClientFactory`; extra `pip install -e .[anthropic]`) |
-| `LLM_MODEL` | `breakfix-qwen3` per ollama, `gpt-5.6-luna` per openai, `claude-opus-5-5` per anthropic | obbligatoria per gli altri provider |
-| `OLLAMA_BASE_URL` | `http://localhost:11434/v1` | API compatibile OpenAI di Ollama |
+| `LLM_MODEL` | `breakfix-qwen3-8b` per ollama, `gpt-5.6-luna` per openai, `claude-opus-5-5` per anthropic | obbligatoria per gli altri provider |
+| `OLLAMA_BASE_URL` | `http://localhost:11434/v1` | API compatibile OpenAI di Ollama, o di un server vLLM |
+| `LLM_REASONING_EFFORT` | non inviata (il `.env.example` imposta `none`) | spegne il ragionamento dei modelli ibridi come `qwen3:8b` |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` | – | oppure `LLM_API_KEY` |
 | `LLM_TEMPERATURE` | non inviata | da impostare solo per modelli che la supportano |
 | `BREAKFIX_SANDBOX` | `docker` | `mock` per test/demo senza Docker |
@@ -454,9 +497,9 @@ attuale: `--reset-memory`.
   Docker, e dentro un container non ce n'è. Darle il socket dell'host sarebbe stato come darle root sul PC,
   quindi le sandbox girano in un Docker-in-Docker. Gli scenari su cgroup, ACL e `/dev/shm` funzionano
   anche annidati: `validate` dà OK su tutti dentro il container.
-- Il Docker privato partiva al primo `up` ma non dopo uno stop/start (es. dal pulsante di Docker Desktop):
-  "failed to start containerd: process with PID 63 is still running". I file dei PID in `/run`
-  sopravvivevano al riavvio e un altro processo aveva lo stesso PID. Con un tmpfs su `/run` si svuotano.
+- Il giudice LLM del tutor, al primo giro, ha promosso un consiglio con il percorso sbagliato; con la
+  rubrica corretta ha bocciato una risposta giusta. Un giudice non verificato è "a intuito" quanto un
+  giudizio umano: da qui la calibrazione su risposte giudicate a mano, che ha scartato il 4B come giudice.
 - Il tutor con il modello locale: alla prima prova, a "da dove comincio?" ha indicato subito `/srv`, cioè
   la causa. "Procedi per gradi" era troppo astratto per un 4B: ora il messaggio gli passa il prossimo
   indizio scritto a mano come livello di dettaglio massimo. Inventava anche percorsi plausibili ma

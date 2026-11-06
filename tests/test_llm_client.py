@@ -23,7 +23,7 @@ class OllamaClientTest(unittest.TestCase):
             client = build_llm_client()
 
         self.assertIsInstance(client, OpenAILikeClient)
-        self.assertEqual(client.model_name, "breakfix-qwen3")
+        self.assertEqual(client.model_name, "breakfix-qwen3-8b")
         self.assertEqual(client.base_url, OLLAMA_BASE_URL)
 
     def test_model_and_url_can_be_overridden(self) -> None:

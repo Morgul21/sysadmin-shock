@@ -157,8 +157,20 @@ class CalibrationTest(unittest.IsolatedAsyncioTestCase):
             expected = sum(item.expected[key] for item in items) / len(items)
             self.assertAlmostEqual(scores[key], expected)
         self.assertLess(scores["tutta la rubrica"], 1)
+        promoted = sum(all(item.expected.values()) for item in items) / len(items)
+        self.assertAlmostEqual(scores["verdetto"], promoted)
+
+    async def test_the_verdict_agrees_even_when_the_judge_blames_the_wrong_item(self) -> None:
+        # L'umano boccia solo graduale, il giudice boccia tutto: tre voci su tre non coincidono
+        # una per una, ma il verdetto (bocciata) è lo stesso.
+        item = next(i for i in load_calibration() if not i.expected["graduale"] and i.expected["corretta"])
+        results = await calibrate([item], Says(verdict(niente_soluzione=False, graduale=False, corretta=False)))
+        scores = agreement(results)
+        self.assertEqual(scores["tutta la rubrica"], 0)
+        self.assertEqual(scores["verdetto"], 1)
 
     async def test_a_judge_that_does_not_answer_never_agrees(self) -> None:
         results = await calibrate(load_calibration()[:2], Says("non so"))
         self.assertEqual(agreement(results)["tutta la rubrica"], 0)
+        self.assertEqual(agreement(results)["verdetto"], 0)
         self.assertIn("JSON", results[0]["error"])
