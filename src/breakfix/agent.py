@@ -13,6 +13,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 from mcp.client.stdio import get_default_environment
@@ -110,11 +111,12 @@ def build_llm_client(provider: str | None = None, model: str | None = None):
 def mcp_server_client() -> MCPClient:
     """Avvia il server MCP come sottoprocesso stdio.
 
-    Al server passiamo solo l'ambiente minimo più le variabili BREAKFIX_*:
-    la API key del modello resta nel processo dell'agente.
+    Al server passiamo solo l'ambiente minimo più le variabili BREAKFIX_* e DOCKER_* (dove sta
+    il Docker delle sandbox, es. quello privato di compose.yaml): la API key del modello resta
+    nel processo dell'agente.
     """
     env = get_default_environment()
-    env.update({key: value for key, value in os.environ.items() if key.startswith("BREAKFIX_")})
+    env.update({key: value for key, value in os.environ.items() if key.startswith(("BREAKFIX_", "DOCKER_"))})
     return MCPClient(command=sys.executable, args=["-m", "breakfix.server"], env=env)
 
 
@@ -174,8 +176,21 @@ async def _run_until_concluded(task: str, client: Client, tools: list, memory: M
     return result
 
 
+# Chi guarda il fixer mentre lavora (es. la pagina): riceve argomenti e risultato di ogni chiamata a un tool.
+ToolObserver = Callable[[dict[str, Any], str], None]
+
+
+def _observed(func: Callable, on_tool: ToolObserver) -> Callable:
+    async def observed(**kwargs):
+        result = await func(**kwargs)
+        on_tool(kwargs, result)
+        return result
+
+    return observed
+
+
 async def run_agent(
-    task: str, client: Client, memory: Memory, audit_dir: Path = AUDIT_DIR
+    task: str, client: Client, memory: Memory, audit_dir: Path = AUDIT_DIR, on_tool: ToolObserver | None = None
 ) -> tuple[AgentRunnerResult, Path]:
     """Esegue il fixer dentro un trace e ne salva l'audit, anche se l'esecuzione fallisce."""
     result = None
@@ -184,6 +199,9 @@ async def run_agent(
         try:
             async with mcp_server_client() as mcp:
                 tools = await mcp.a_list_tools()
+                if on_tool:
+                    for tool in tools:
+                        tool.func = _observed(tool.func, on_tool)
                 result = await _run_until_concluded(task, client, tools, memory)
         except Exception as exc:
             error = _root_cause(exc)

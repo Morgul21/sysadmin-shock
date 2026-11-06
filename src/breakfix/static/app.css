@@ -315,6 +315,22 @@ code {
 }
 .tutor-form textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
 
+#fixer { margin: 10px 0; }
+#fixer-status { margin: 10px 0 0; color: var(--amber); font-family: var(--mono); }
+.fixer-steps { margin: 10px 0 0; padding-left: 26px; }
+.fixer-steps li { margin: 0 0 8px; }
+.fixer-steps li::marker { color: var(--muted); font: 12px var(--mono); }
+.fixer-steps details summary { font: 13px var(--mono); color: var(--code-text); font-weight: 400; overflow-wrap: anywhere; }
+.fixer-steps pre { max-height: 180px; overflow: auto; margin-top: 4px; }
+.fixer-steps li.blocked summary { color: var(--amber); }
+.step-tag { margin-left: 6px; font: 11px var(--mono); padding: 1px 6px; border-radius: 3px; }
+.step-tag.ok { color: var(--pass-text); background: var(--pass-bg); }
+.step-tag.error { color: var(--fail-text); background: var(--fail-bg); }
+.step-tag.blocked { color: var(--bg); background: var(--amber); }
+#fixer-result { margin-top: 10px; }
+#fixer-result .verdict { margin-bottom: 8px; }
+.fixer-answer { white-space: pre-wrap; background: var(--hint-bg); border-left: 3px solid var(--accent); border-radius: 3px; padding: 10px 14px; }
+
 .verdict { border-radius: 3px; padding: 10px 14px; margin: 0; font: 600 14px var(--mono); }
 .verdict.pass { background: var(--pass-bg); color: var(--pass-text); border-left: 3px solid var(--easy); }
 .verdict.fail { background: var(--fail-bg); color: var(--fail-text); border-left: 3px solid var(--hard); }

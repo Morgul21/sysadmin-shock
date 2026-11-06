@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import queue
+import time
 import tempfile
 import unittest
 from pathlib import Path
@@ -221,8 +222,6 @@ class TerminalTest(unittest.TestCase):
         sock.settimeout.assert_called_once_with(None)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class FakeModel(MockClient):
@@ -296,3 +295,90 @@ class TutorApiTest(unittest.TestCase):
         response = self.client.post("/api/tutor", json={"question": "aiuto"})
         self.assertEqual(response.status_code, 503)
         self.assertIn("non ha risposto", response.json()["detail"])
+
+
+class FixerApiTest(unittest.TestCase):
+    """Il pulsante "Fallo risolvere all'AI": modello scriptato, sandbox mock (anche per il server MCP), lab finto."""
+
+    def setUp(self) -> None:
+        from functools import partial
+
+        from breakfix.evaluate import evaluate_scenario
+        from test_agent_trace import ScriptedClient
+        from test_evaluate import FakeLab
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.lab = FakeLab(passed=True)
+        self.model = ScriptedClient(
+            commands=["ls -l /srv/app", "chmod 777 /srv/app/run.sh", "chmod 755 /srv/app/run.sh"],
+            answer="Causa: run.sh senza bit di esecuzione. Correzione: chmod 755. Verifica: gestionale parte.",
+        )
+        for patch in (
+            mock.patch.dict("os.environ", {"BREAKFIX_SANDBOX": "mock"}),
+            mock.patch.object(web, "_fixer", None),
+            mock.patch.object(web, "DockerLab", lambda: self.lab),
+            mock.patch.object(web, "build_llm_client", side_effect=lambda: self.model),
+            mock.patch.object(web, "evaluate_scenario", partial(evaluate_scenario, audit_dir=Path(tmp.name))),
+            mock.patch("breakfix.sandbox.active_scenario", return_value="run-sh-noexec"),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+        # Con il context manager il loop resta vivo tra una richiesta e l'altra: il fixer gira in sottofondo.
+        self.client = self.enterContext(TestClient(web.app))
+
+    def _wait(self) -> dict:
+        for _ in range(200):
+            run = self.client.get("/api/fixer").json()
+            if run["status"] != "running":
+                return run
+            time.sleep(0.05)
+        self.fail("il fixer non ha finito")
+
+    def test_the_run_is_followed_step_by_step_and_judged_by_the_check(self) -> None:
+        self.assertIsNone(self.client.get("/api/fixer").json())
+        response = self.client.post("/api/fixer")
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["status"], "running")
+        run = self._wait()
+
+        self.assertEqual(run["status"], "done")
+        self.assertEqual(self.lab.started, ["run-sh-noexec"])  # sandbox rotta da capo, come nell'eval
+        self.assertEqual([s["command"] for s in run["steps"]],
+                         ["ls -l /srv/app", "chmod 777 /srv/app/run.sh", "chmod 755 /srv/app/run.sh"])
+        self.assertEqual([s["blocked"] for s in run["steps"]], [False, True, False])
+        result = run["result"]
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["check_output"], "PASS: ok")
+        self.assertEqual((result["tool_calls"], result["blocked_by_guardrail"]), (3, 1))
+        self.assertIn("chmod 755", result["answer"])
+
+    def test_the_verdict_is_the_check_not_the_answer(self) -> None:
+        self.lab.passed = False  # l'AI dice di aver riparato, il check no
+        self.client.post("/api/fixer")
+        result = self._wait()["result"]
+        self.assertFalse(result["passed"])
+        self.assertIn("Verifica", result["answer"])
+
+    def test_only_tickets_and_only_from_the_page(self) -> None:
+        self.assertEqual(self.client.post("/api/fixer", headers=FOREIGN).status_code, 403)
+        with mock.patch("breakfix.sandbox.active_scenario", return_value="esercizio:5.1"):
+            self.assertEqual(self.client.post("/api/fixer").status_code, 409)
+        self.assertEqual(self.lab.started, [])
+
+    def test_nothing_else_starts_while_the_ai_works(self) -> None:
+        with mock.patch.object(web, "_fixer", web.FixerRun(scenario="run-sh-noexec")):
+            for path in ("/api/fixer", "/api/start/1", "/api/learn/1.1"):
+                with self.subTest(path):
+                    self.assertEqual(self.client.post(path).status_code, 409)
+        self.assertEqual(self.lab.started, [])
+
+    def test_a_finished_run_belongs_to_its_ticket(self) -> None:
+        self.client.post("/api/fixer")
+        self._wait()
+        with mock.patch("breakfix.sandbox.active_scenario", return_value="memory-hog"):
+            self.assertIsNone(self.client.get("/api/fixer").json())
+
+
+if __name__ == "__main__":
+    unittest.main()

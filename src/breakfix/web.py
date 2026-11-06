@@ -9,6 +9,9 @@ Fa quello che fa la CLI `breakfix-sandbox` (list, start, lessons, learn, shell, 
 Come nella shell della CLI, chi si esercita è root e i comandi non passano dal guardrail:
 il guardrail protegge dagli agenti, non da chi si esercita. Il verdetto lo dà sempre check.sh.
 
+Il pulsante "Fallo risolvere all'AI" lancia sul ticket attivo la stessa prova di `breakfix-eval`
+(sandbox rotta da capo -> fixer -> check.sh), e la pagina ne segue i comandi mentre lavora.
+
 Una shell di root nella sandbox non va esposta: il server ascolta solo su 127.0.0.1, e le
 richieste che cambiano stato (POST, websocket) devono venire dalla pagina stessa (Origin):
 un altro sito aperto nel browser non può avviare scenari né aprire il terminale.
@@ -21,11 +24,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import json
 import os
 import secrets
 import subprocess
 import threading
 import webbrowser
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +44,9 @@ from starlette.datastructures import Headers
 from pydantic import BaseModel, Field
 
 from breakfix import lessons, sandbox, tutor
-from breakfix.agent import AgentRunError, build_llm_client
+from breakfix.agent import AgentRunError, build_llm_client, utf8_console
+from breakfix.evaluate import evaluate_scenario
+from breakfix.guardrail import BLOCKED_PREFIX
 from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
 from breakfix.lessons import Exercise, LessonLab
 
@@ -174,6 +181,74 @@ def _active() -> Scenario | None:
         return None
 
 
+# --- "Fallo risolvere all'AI": il fixer sul ticket attivo, seguito dalla pagina ---------------
+
+MAX_STEP_OUTPUT = 2000  # caratteri di output per comando mostrati nella pagina (l'audit ha tutto)
+
+
+def fixer_step(arguments: dict[str, Any], result: str) -> dict[str, Any]:
+    """Una chiamata del fixer a exec_in_sandbox, come la mostra la pagina."""
+    step: dict[str, Any] = {"command": str(arguments.get("command", "")), "blocked": False, "exit_code": None}
+    try:
+        data = json.loads(result)
+    except ValueError:
+        return {**step, "output": result[-MAX_STEP_OUTPUT:]}
+    if data.get("isError"):  # il guardrail, o un comando che il tool rifiuta
+        text = "\n".join(str(c.get("text", "")) for c in data.get("content") or [])
+        return {**step, "blocked": BLOCKED_PREFIX in text, "output": text[-MAX_STEP_OUTPUT:]}
+    out = data.get("structuredContent") or {}
+    output = (str(out.get("stdout", "")) + str(out.get("stderr", ""))).strip()
+    return {**step, "exit_code": out.get("exit_code"), "output": output[-MAX_STEP_OUTPUT:]}
+
+
+@dataclass
+class FixerRun:
+    scenario: str
+    status: str = "running"  # running, done (c'è il verdetto), error (non è arrivato al verdetto)
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    task: asyncio.Task | None = None
+
+    def view(self) -> dict[str, Any]:
+        return {"status": self.status, "steps": self.steps, "result": self.result, "error": self.error}
+
+
+# Una sola esecuzione per volta: c'è una sola sandbox.
+_fixer: FixerRun | None = None
+
+
+def _fixer_running() -> bool:
+    return _fixer is not None and _fixer.status == "running"
+
+
+def require_no_fixer() -> None:
+    if _fixer_running():
+        raise HTTPException(409, "l'AI sta lavorando sulla sandbox: aspetta che finisca")
+
+
+async def _run_fixer(run: FixerRun, scenario: Scenario, client: Any) -> None:
+    try:
+        row = await evaluate_scenario(scenario, client, DockerLab(),
+                                      on_tool=lambda arguments, result: run.steps.append(fixer_step(arguments, result)))
+    except Exception as exc:  # es. Docker giù: senza sandbox non c'è nemmeno il verdetto
+        run.status, run.error = "error", f"{type(exc).__name__}: {exc}"
+        return
+    run.result = {
+        "passed": row.passed,
+        "check_output": row.check_output,
+        "answer": row.answer,
+        "error": row.error,  # il fixer si è fermato a metà (es. modello non raggiungibile): il check vale comunque
+        "tool_calls": row.tool_calls,
+        "blocked_by_guardrail": row.blocked_by_guardrail,
+        "llm_calls": row.llm_calls,
+        "tokens": row.tokens,
+        "duration_s": row.duration_s,
+        "audit": Path(row.audit_path).name,
+    }
+    run.status = "done"
+
+
 app = FastAPI(title="Sysadmin Shock")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -217,8 +292,9 @@ def active() -> dict[str, Any] | None:
     return scenario_view(scenario) if scenario else None
 
 
-@app.post("/api/start/{number}", dependencies=[Depends(require_same_origin)])
+@app.post("/api/start/{number}", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
 async def start(number: int) -> dict[str, Any]:
+    global _fixer
     try:
         scenario = get_scenario(str(number))
     except KeyError as exc:
@@ -228,11 +304,13 @@ async def start(number: int) -> dict[str, Any]:
     except DOCKER_ERRORS as exc:
         raise HTTPException(503, f"avvio fallito: {exc}. Docker Desktop è avviato? "
                                  "L'immagine va buildata una volta con `breakfix-sandbox up`.") from exc
+    _fixer = None  # sandbox nuova: quello che ha fatto l'AI su quella vecchia non vale più
     return scenario_view(scenario)
 
 
-@app.post("/api/learn/{key}", dependencies=[Depends(require_same_origin)])
+@app.post("/api/learn/{key}", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
 async def learn(key: str) -> dict[str, Any]:
+    global _fixer
     try:
         exercise = lessons.get_exercise(key)
     except KeyError as exc:
@@ -242,6 +320,7 @@ async def learn(key: str) -> dict[str, Any]:
     except DOCKER_ERRORS as exc:
         raise HTTPException(503, f"avvio fallito: {exc}. Docker Desktop è avviato? "
                                  "L'immagine va buildata una volta con `breakfix-sandbox up`.") from exc
+    _fixer = None
     return exercise_view(exercise)
 
 
@@ -290,6 +369,37 @@ async def ask_tutor(request: TutorRequest) -> dict[str, Any]:
     return conversation.transcript[-1]
 
 
+@app.get("/api/fixer")
+async def fixer_status() -> dict[str, Any] | None:
+    """L'esecuzione del fixer sul ticket attivo: la pagina la interroga finché è in corso."""
+    run = _fixer
+    if run is None:
+        return None
+    if run.status != "running":  # finita: vale solo per il ticket su cui è stata fatta
+        scenario = await asyncio.to_thread(_active)
+        if scenario is None or scenario.id != run.scenario:
+            return None
+    return run.view()
+
+
+@app.post("/api/fixer", status_code=202, dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
+async def start_fixer() -> dict[str, Any]:
+    """Come `breakfix-eval` sul ticket attivo: sandbox rotta da capo, fixer, check.sh. In sottofondo:
+    la risposta arriva subito, i comandi e il verdetto con GET /api/fixer."""
+    global _fixer
+    scenario = await asyncio.to_thread(_active)
+    if scenario is None:
+        raise HTTPException(409, "l'AI ripara i ticket: avviane uno dalle Challenge")
+    try:
+        client = build_llm_client()
+    except SystemExit as exc:  # build_llm_client è pensata per la CLI: esce con il messaggio
+        raise HTTPException(503, f"modello non configurato: {exc.code}") from exc
+    run = FixerRun(scenario=scenario.id)
+    run.task = asyncio.create_task(_run_fixer(run, scenario, client))  # il riferimento la tiene viva
+    _fixer = run
+    return run.view()
+
+
 @app.websocket("/ws/terminal")
 async def terminal(ws: WebSocket, cols: int = 80, rows: int = 24) -> None:
     """Dal browser arrivano messaggi JSON ({"input": testo} o {"resize": [colonne, righe]}),
@@ -332,7 +442,8 @@ async def terminal(ws: WebSocket, cols: int = 80, rows: int = 24) -> None:
 def main() -> None:
     import uvicorn
 
-    load_dotenv()  # provider e modello del tutor
+    utf8_console()  # il log dell'agente stampa le risposte del modello (es. "→"): su Windows senza, l'esecuzione fallisce
+    load_dotenv()  # provider e modello del tutor e del fixer
     parser = argparse.ArgumentParser(prog="breakfix-ui", description="La UI dell'esercizio nel browser")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true", help="non aprire il browser")

@@ -91,6 +91,23 @@
         </form>
       </details>
 
+      <details id="fixer" class="card" hidden>
+        <summary>Fallo risolvere all'AI</summary>
+        <p class="muted small">Un agente AI, il fixer, riceve lo stesso ticket e prova a riparare la sandbox da solo.
+          Usa un solo strumento (eseguire un comando), e ogni comando passa prima dal guardrail, che blocca quelli
+          pericolosi. Alla fine il verdetto non lo dà l'AI: lo dà lo stesso controllo del pulsante Verifica.</p>
+        <p class="muted small">La sandbox riparte rotta da capo: quello che hai fatto nel terminale si perde.
+          Con il modello locale può servire qualche minuto.</p>
+        <button id="fixer-start">Fallo risolvere all'AI</button>
+        <p id="fixer-status" class="small" aria-live="polite" hidden></p>
+        <ol id="fixer-steps" class="fixer-steps"></ol>
+        <div id="fixer-result" hidden>
+          <p id="fixer-verdict" class="verdict"></p>
+          <p id="fixer-summary" class="muted small"></p>
+          <p id="fixer-answer" class="fixer-answer" hidden></p>
+        </div>
+      </details>
+
       <div class="actions">
         <button id="check" class="primary">Verifica</button>
         <a id="next" class="button" hidden></a>

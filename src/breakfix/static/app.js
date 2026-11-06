@@ -252,6 +252,10 @@ function render(view) {
   renderHints();
   $("tutor").hidden = !isTicket;
   if (isTicket) loadTutor();
+  $("fixer").hidden = !isTicket;
+  stopFixerPolling();
+  if (isTicket) loadFixer();
+  else renderFixer(null);
   $("work").hidden = false;
   // L'indirizzo segue quello che è attivo (es. il primo esercizio scelto in automatico).
   const hash = isTicket ? `#/challenge/${view.number}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
@@ -358,6 +362,97 @@ async function askTutor(event) {
   } finally {
     $("tutor-send").disabled = false;
     $("tutor-send").textContent = "Chiedi";
+  }
+}
+
+// --- "Fallo risolvere all'AI": il fixer lavora sul server, la pagina ne segue i comandi ----------
+
+const FIXER_POLL_MS = 1500;
+let fixerTimer = null;
+
+function fixerStep(step) {
+  const tag = step.blocked
+    ? '<span class="step-tag blocked">bloccato dal guardrail</span>'
+    : step.exit_code === 0 ? '<span class="step-tag ok">ok</span>'
+    : `<span class="step-tag error">${step.exit_code == null ? "rifiutato" : `errore ${step.exit_code}`}</span>`;
+  const output = step.output ? `<pre>${escape(step.output)}</pre>` : '<pre class="muted">(nessun output)</pre>';
+  return `<li class="${step.blocked ? "blocked" : ""}"><details><summary>${escape(step.command)}${tag}</summary>` +
+    `${output}</details></li>`;
+}
+
+function renderFixer(run) {
+  const running = run?.status === "running";
+  $("fixer-start").disabled = running;
+  $("fixer-start").textContent = running ? "L'AI sta lavorando…" : run ? "Fallo riprovare all'AI" : "Fallo risolvere all'AI";
+  $("fixer-steps").innerHTML = (run?.steps || []).map(fixerStep).join("");
+  $("fixer-status").hidden = !(running || run?.status === "error");
+  if (running) {
+    const n = run.steps.length;
+    $("fixer-status").textContent = n ? `L'AI ha lanciato ${n} comand${n === 1 ? "o" : "i"} finora…`
+      : "Riparto dalla sandbox rotta e l'AI legge il ticket…";
+  } else if (run?.status === "error") {
+    $("fixer-status").textContent = `L'AI non è arrivata al verdetto: ${run.error}`;
+  }
+  const result = run?.status === "done" ? run.result : null;
+  $("fixer-result").hidden = !result;
+  if (!result) return;
+  $("fixer-verdict").className = `verdict ${result.passed ? "pass" : "fail"}`;
+  $("fixer-verdict").textContent = result.passed
+    ? "PASS: l'AI ha riparato il ticket (lo dice il controllo, non l'AI)"
+    : "FAIL: l'AI non è riuscita a riparare il ticket";
+  const blocked = result.blocked_by_guardrail ? `, ${result.blocked_by_guardrail} bloccati dal guardrail` : "";
+  $("fixer-summary").textContent =
+    `${result.tool_calls} comandi${blocked} · ${result.llm_calls} chiamate al modello · ${result.tokens} token · ` +
+    `${result.duration_s} s · registro completo: .breakfix/audit/${result.audit}` +
+    (result.error ? ` · l'AI si è fermata a metà: ${result.error}` : "");
+  $("fixer-answer").hidden = !result.answer;
+  $("fixer-answer").textContent = result.answer ? `Cosa dice di aver fatto l'AI:\n\n${result.answer}` : "";
+}
+
+function stopFixerPolling() {
+  clearTimeout(fixerTimer);
+  fixerTimer = null;
+}
+
+function pollFixer() {
+  stopFixerPolling();
+  fixerTimer = setTimeout(async () => {
+    try {
+      const run = await api("/api/fixer");
+      renderFixer(run);
+      if (run?.status === "running") return pollFixer();
+      fixerTimer = null;
+      connect(); // la sandbox è nuova: il terminale si riapre sulla macchina lasciata dall'AI
+    } catch (error) {
+      showError(error.message);
+      pollFixer();
+    }
+  }, FIXER_POLL_MS);
+}
+
+async function loadFixer() {
+  try {
+    const run = await api("/api/fixer");
+    renderFixer(run);
+    $("fixer").open = $("fixer").open || Boolean(run);
+    if (run?.status === "running") pollFixer();
+  } catch {
+    renderFixer(null);
+  }
+}
+
+async function startFixer() {
+  if (!confirm("La sandbox riparte rotta da capo e l'AI prova a ripararla da sola. " +
+    "Quello che hai fatto nel terminale si perde. Procedo?")) return;
+  showError("");
+  $("verdict").hidden = true;
+  $("fixer-start").disabled = true;
+  try {
+    renderFixer(await api("/api/fixer", "POST"));
+    pollFixer();
+  } catch (error) {
+    showError(error.message);
+    $("fixer-start").disabled = false;
   }
 }
 
@@ -490,6 +585,7 @@ $("next-hint").onclick = () => {
 };
 $("reconnect").onclick = connect;
 $("tutor-form").onsubmit = askTutor;
+$("fixer-start").onclick = startFixer;
 // Invio manda la domanda, Maiusc+Invio va a capo.
 $("tutor-question").onkeydown = (event) => {
   if (event.key === "Enter" && !event.shiftKey) $("tutor-form").requestSubmit();
