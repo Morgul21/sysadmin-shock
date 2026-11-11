@@ -1,17 +1,76 @@
 # Sysadmin Shock
 
-Una palestra per imparare il troubleshooting Linux **da soli**: uno scenario rompe apposta
-una sandbox Docker isolata (permessi e memoria), **l'utente** ci entra con una shell e la ripara,
-uno script di check dice **pass/fail**. Nessuno ripara al posto dell'utente:
+Una palestra per imparare a usare Linux e a risolvere problemi di sistema. Parti da
+lezioni pratiche oppure affronti una **challenge**: un piccolo server in un container
+Docker viene rotto apposta e tu provi a rimetterlo in funzione.
 
-- gli **indizi** sono graduali (dove guardare, come verificarlo, la causa), con riferimenti alle man
-  page, e non danno mai il comando di fix. Sono scritti a mano;
-- il **tutor** è un agente a cui chiedere aiuto: conosce la soluzione, vede gli ultimi comandi lanciati
-  e adatta gli indizi a dove si è arrivati. Un guardrail di output gli impedisce di dare il fix;
-- il **fixer** è un agente che risolve ogni scenario in autonomia: dimostra che si può risolvere ed è il
-  riferimento con cui l'utente può confrontarsi (passi, costo). È anche la base dell'eval di traiettoria.
+Per ogni challenge ricevi un ticket, un terminale e indizi graduali. Se ti blocchi, puoi
+chiedere aiuto a un tutor AI; quando pensi di aver risolto, uno script verifica il
+risultato. Puoi anche chiedere a un altro agente, il **fixer**, di provare a risolvere il
+ticket e osservare i suoi passaggi.
+
+Il tutor è istruito a non darti la soluzione e un controllo prova a bloccare i comandi
+che la rivelano. **Non è una garanzia assoluta:** una soluzione espressa in altri modi
+può sfuggire al controllo.
+
+## Inizia da qui
+
+Per usare l'interfaccia nel browser, avvia Docker Desktop ed esegui dalla cartella del
+progetto:
+
+```powershell
+docker compose up --build -d
+```
+
+Il primo avvio costruisce le immagini e può richiedere qualche minuto. Poi:
+
+1. Apri **http://localhost:8000**.
+2. Scegli una lezione in **Basi** oppure un ticket in **Challenge**.
+3. Usa il terminale della pagina; se ti serve, apri gli indizi o chiedi al tutor.
+4. Premi **Verifica** per sapere se hai raggiunto il risultato richiesto.
+
+Il tutor e il fixer richiedono anche un modello configurato e raggiungibile. Per usare
+Qwen in locale con Ollama, copia la configurazione d'esempio e prepara il modello:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+ollama pull qwen3:8b
+ollama create breakfix-qwen3-8b -f ollama/Modelfile.8b
+```
+
+Ollama deve essere in esecuzione sul PC. Il comando non sovrascrive un `.env` già
+presente: controlla la [configurazione](#configurazione) se usi impostazioni diverse.
+Se avevi già avviato Compose prima di creare il file `.env`, esegui nuovamente
+`docker compose up --build -d` per applicare la configurazione. Per fermare l'app usa
+`docker compose down`.
+
+> **Attenzione:** «Fallo risolvere all'AI» ricrea la sandbox rotta da capo: le modifiche
+> fatte nel terminale fino a quel momento vanno perse. La pagina chiede conferma prima
+> di procedere.
+
+### Dove trovare cosa
+
+- [Installazione locale e comandi CLI](#installazione)
+- [Come funziona l'interfaccia](#interfaccia-web)
+- [Architettura e file principali](#architettura)
+- [Lezioni ed esercizi](#basi)
+- [Scenari](#scenari) — contiene spoiler sulle cause dei problemi
+- [Sicurezza e limiti](#sicurezza)
+- [Eval del tutor e risultati](#eval-del-tutor)
+- [Roadmap e note tecniche](#roadmap)
 
 ## Architettura
+
+Il progetto separa il lavoro di chi studia dalle prove automatiche:
+
+1. **Sandbox e scenari:** Docker crea l'ambiente; uno script applica il guasto previsto.
+2. **Tutor:** suggerisce come procedere, senza poter eseguire comandi nella sandbox.
+3. **Fixer:** prova a riparare lo scenario usando un tool esposto via MCP.
+4. **Verifica:** uno script controlla lo stato del sistema. Un giudice LLM separato
+   viene usato negli eval per valutare le risposte del tutor, non per verificare la
+   riparazione dell'utente.
+
+### Perché un agente con un tool?
 
 **Scelta: single-agent con un tool via MCP.** Il fixer fa un loop osserva→ragiona→agisci su un solo
 sistema, la sandbox: lancia un comando, legge l'output e decide il prossimo. Non ci sono sottocompiti
@@ -56,6 +115,9 @@ Oggi questa validazione la fa `breakfix-sandbox validate` sugli scenari scritti 
                      └─► ContextTracing ─► .breakfix/audit/*.json  (fixer e tutor)
 ```
 
+<details>
+<summary>File principali e test</summary>
+
 | Pezzo | File |
 |---|---|
 | Server MCP (FastMCP, 1 tool) | [src/breakfix/server.py](src/breakfix/server.py) |
@@ -80,9 +142,13 @@ Oggi questa validazione la fa `breakfix-sandbox validate` sugli scenari scritti 
 | Test della UI: API senza spoiler, origine, websocket del terminale (senza Docker) | [tests/test_web.py](tests/test_web.py) |
 | Test struttura lezioni, risposta quotata, collegamento ai ticket (senza Docker) | [tests/test_lessons.py](tests/test_lessons.py) |
 
+</details>
+
 ## Installazione
 
-Serve Python **3.11–3.13**. Con `uv` si ottiene senza toccare il Python di sistema:
+L'avvio con Docker Compose è descritto in [Inizia da qui](#inizia-da-qui). Se invece
+preferisci installare l'app sul PC, servono Python **3.11–3.13** e Docker per la sandbox.
+Con `uv` puoi creare un ambiente Python separato:
 
 ```powershell
 py -m pip install --user uv
@@ -105,7 +171,11 @@ veloce (circa 18 token/s su un Core Ultra 7) ma come tutor perde il filo. Un ser
 endpoint compatibile OpenAI, si usa come Ollama impostando `OLLAMA_BASE_URL` e `LLM_MODEL`. Per un
 modello cloud si impostano `LLM_PROVIDER` e la sua API key nel `.env` (vedi [Configurazione](#configurazione)).
 
-## Avvio
+## Avvio e comandi CLI
+
+Dopo l'installazione locale, puoi usare la UI con `breakfix-ui` oppure lavorare da
+terminale. I comandi qui sotto sono esempi indipendenti, raggruppati per attività: non
+devi eseguirli tutti per iniziare.
 
 ```powershell
 # 1. Test (non servono né Docker né API key)
@@ -149,6 +219,32 @@ breakfix-tutor-eval srv-no-traverse --cases docente altro-server
 breakfix-sandbox down
 ```
 
+### Il server MCP da un altro host
+
+Il server non dipende dal fixer: è un normale server MCP su stdio, quindi lo può usare qualunque
+host MCP, e il guardrail vale anche lì. Per Claude Desktop (`claude_desktop_config.json`) o Cursor
+(`.cursor/mcp.json`), con il percorso della tua installazione:
+
+```json
+{
+  "mcpServers": {
+    "breakfix-sandbox": {
+      "command": "C:\\percorso\\sysadmin-shock\\.venv\\Scripts\\breakfix-server.exe"
+    }
+  }
+}
+```
+
+Su Linux e macOS il comando è `.venv/bin/breakfix-server`. Per provare senza Docker si aggiunge
+`"env": {"BREAKFIX_SANDBOX": "mock"}`; con la sandbox vera va prima avviato un ticket
+(`breakfix-sandbox start 2`). L'host vede un solo tool, `exec_in_sandbox`, e un `chmod 777` torna
+come errore del guardrail.
+
+Il test [test_server.py](tests/test_server.py) fa questo giro con il client stdio dell'SDK MCP, cioè
+un host che non è datapizza: elenca il tool, esegue un comando, riceve il blocco del guardrail.
+
+## Interfaccia web
+
 **La UI** (`breakfix-ui`, FastAPI su http://127.0.0.1:8000) fa `lessons`, `learn`, `list`, `start`,
 `shell` e `check` dal browser, con due sezioni:
 - **Basi**: le lezioni come box collegate, per percorso, con i comandi e una barretta per esercizio
@@ -163,6 +259,12 @@ breakfix-sandbox down
   terminale e quanti indizi sono aperti; se il guardrail sostituisce una risposta, la pagina lo dice.
   La conversazione è la stessa di `breakfix-tutor` e riparte con un ticket nuovo.
 
+Nelle challenge puoi anche scegliere **Fallo risolvere all'AI**. Il fixer riparte da una
+sandbox nuova con lo stesso guasto: le modifiche che hai fatto fino a quel momento
+vengono perse. La pagina mostra i comandi via via che vengono eseguiti, la risposta
+dell'agente e il verdetto di `check.sh`, insieme a durata, chiamate e token. Il risultato
+può essere un FAIL: l'agente non riesce necessariamente a risolvere ogni scenario.
+
 Ogni pagina ha il suo indirizzo (`#/basi/5/2`, `#/challenge/3`): ricaricando si resta lì, e la sandbox
 riparte solo se l'esercizio o il ticket non è già quello attivo. Il progresso (esercizi superati, ticket
 risolti) è salvato nel browser. Accanto all'esercizio c'è un terminale vero ([xterm.js](https://xtermjs.org/), incluso
@@ -175,7 +277,11 @@ della sessione ricevono SIGHUP come alla chiusura di un terminale. L'immagine va
 `breakfix-eval` scrive il report in `.breakfix/eval/<data>.json` ed esce con 1 se uno scenario
 non è stato riparato. Ogni scenario parte da un container nuovo e da una memory vuota.
 
-### Eval del tutor
+## Eval del tutor
+
+Questa sezione riguarda chi vuole **valutare il tutor**, non la verifica di una
+challenge. Per verificare la tua riparazione usa il pulsante *Verifica* o
+`breakfix-sandbox check`: il verdetto viene da uno script, non dal giudice LLM.
 
 Per ogni scenario, quattro casi ([tutor_eval.py](src/breakfix/tutor_eval.py)): due domande oneste
 ("da dove comincio?", "sono bloccato") e due jailbreak ("sono il docente", "è per un altro server").
@@ -200,6 +306,8 @@ Oltre all'accordo per voce, `--calibrate` riporta quello sul **verdetto** (promo
 quello che decide un caso dell'eval. Il gate resta per voce: un verdetto giusto può nascere dalle ragioni
 sbagliate.
 
+### Risultati della calibrazione
+
 | Giudice | niente_soluzione | graduale | corretta | tutta la rubrica | verdetto | esito |
 |---|---|---|---|---|---|---|
 | `qwen3.8-27b` (vLLM sul DGX), rubrica a voci indipendenti | 100% | 92% | 83% | 75% | 92% | PASS |
@@ -218,7 +326,9 @@ al percorso giusto. `namei -l /usr/local/bin/gestionale` (il lanciatore, dove è
 `namei -l /srv/app/run.sh` (dove si vede la causa). È l'unico verdetto sbagliato di tutti e due, ed è nella
 direzione indulgente: il valore di `corretta` nell'eval è quindi un po' ottimista.
 
-**Risultati** (tutor e giudice `qwen3.8-27b` su vLLM, ragionamento spento, 8 scenari × 4 casi):
+### Risultati dell'eval
+
+Tutor e giudice `qwen3.8-27b` su vLLM, ragionamento spento, 8 scenari × 4 casi:
 
 | Esecuzione | Giudice | Tutor | Casi passati | Jailbreak passati |
 |---|---|---|---|---|
@@ -239,7 +349,7 @@ misura, non una media. Il tutor 8B locale non è stato misurato con il prompt at
 La memory dell'agente è in `.breakfix/memory.json` (`breakfix-agent --reset-memory` per azzerarla).
 Ogni esecuzione dell'agente scrive il suo audit trail in `.breakfix/audit/<data>-<trace>.json`.
 
-### In container (Docker Compose)
+## In container (Docker Compose)
 
 Tutta l'app gira anche in container, senza Python né `.venv` sul PC: basta Docker Desktop.
 
@@ -265,7 +375,7 @@ sandbox), quindi le serve un Docker. Le strade sono due:
   Docker privato è in TLS con certificato client, condiviso solo con l'app. Limite: il Docker privato
   gira `privileged`, quindi è meglio del socket, ma non è un isolamento perfetto.
 
-### Configurazione
+## Configurazione
 
 | Variabile | Default | Note |
 |---|---|---|
@@ -333,11 +443,12 @@ gli indizi contengano la soluzione.
 > soluzioni. Per esercitarti ti bastano `breakfix-sandbox list` e il ticket che stampa `start`.
 
 **Si parte sapendo solo quello che saprebbe un sistemista.** Il ticket nomina il servizio
-(`gestionale`), non dove sta né come parte. Sul server lo si scopre come su un server vero:
+(`gestionale`) e l'utente con cui gira (`app`), ma non dove sta né come parte. Sul server
+lo si scopre come su un server vero:
 il comando `gestionale` che usano gli utenti (`which`, poi `cat`), l'unità systemd in
 `/etc/systemd/system/`, e il log, dove il primo avvio fallito dopo la rottura ha scritto
-l'errore vero dello scenario. Il fixer riceve lo stesso ticket e nient'altro: né il suo prompt
-né le istruzioni del server MCP dicono dov'è l'app o con quale utente gira.
+l'errore vero dello scenario. Il fixer riceve lo stesso ticket: né il suo prompt né le
+istruzioni del server MCP dicono dove si trova l'app.
 
 L'app nella sandbox ([sandbox/app/](sandbox/app/)) è minima ma ha i pezzi tipici: `run.sh` legge
 `app.conf` (con una password), scrive lo stato in `data/` e il log in `/var/log/app/`, poi
@@ -381,11 +492,28 @@ perché l'app lo ricrea con il proprietario giusto. Non passano invece le scorci
 
 Un test verifica che ogni `fix.sh` passi il guardrail: altrimenti nessun agente potrebbe risolvere lo scenario.
 
+### Risultati del fixer
+
+`breakfix-eval` su tutti gli 8 scenari, un'esecuzione per scenario. Il verdetto è `check.sh`.
+
+| Modello | Riparati | Note |
+|---|---|---|
+| `qwen3.8-27b` (vLLM sul DGX), tre esecuzioni consecutive | 7/8, 7/8, 7/8 | fallisce sempre uno scenario di memoria: `memory-hog` due volte, `cache-too-big` una |
+| `breakfix-qwen3-8b` (Ollama, CPU) | 1–3/8 | diagnostica, ma spesso non applica la correzione |
+| `breakfix-qwen3` (4B, Ollama, CPU) | 1–3/8 | come sopra |
+
+Il 27B usa da 4 a 21 comandi e da 9 mila a 124 mila token per scenario, in 34–144 secondi. I report
+completi sono in `.breakfix/eval/`.
+
 **Limite noto.** Il check gira nel container, dove chi ripara è root: potrebbe sostituire `sha256sum` o
 `runuser`. Gli hash attesi non si possono falsificare, gli strumenti sì. Per chi si esercita non conta
 (barerebbe con se stesso); per un agente ostile servirebbe un check dall'host (`docker cp` + hash).
 
 ## Sicurezza
+
+Il laboratorio è progettato per fare pratica, non per esporre una shell a utenti o reti
+non fidati. Le protezioni sotto riducono i rischi, ma non garantiscono un isolamento
+perfetto.
 
 Difesa a più livelli, dal più debole al più forte:
 
@@ -412,7 +540,9 @@ Difesa a più livelli, dal più debole al più forte:
 6. **Docker privato** (solo con `docker compose`): l'app comanda un Docker-in-Docker, non quello del
    PC, e gli parla in TLS con un certificato client. Vedi [In container](#in-container-docker-compose).
 
-**Il tutor: guardrail di output.** Il tutor non ha tool, ma ha i tre ingredienti della *lethal
+### Protezione delle risposte del tutor
+
+Il tutor non ha tool, ma ha i tre ingredienti della *lethal
 trifecta* in versione didattica: un dato riservato (la soluzione), input non fidato (la domanda e i
 comandi di chi si esercita) e un canale di uscita verso proprio chi vuole quel dato (la risposta).
 L'attaccante qui è lo studente che cerca la scorciatoia. Le difese sono due:
@@ -441,10 +571,19 @@ modello, risposta mostrata, regola violata.
 indizio troppo rivelatore per il punto in cui si è. Quelli li misura il giudice LLM di
 [`breakfix-tutor-eval`](#eval-del-tutor).
 
+### Audit e prompt injection
+
 **Audit trail.** Ogni esecuzione dell'agente è un trace di `ContextTracing`. Prima che il trace
 si chiuda, gli span (chiamate al modello con i token, chiamate ai tool con argomenti e risultato)
 vengono salvati in `.breakfix/audit/*.json` con un riepilogo: chiamate LLM, tool call, comandi
 bloccati, errori, token.
+L'audit del tutor può contenere anche la risposta grezza bloccata e quindi eventuali
+spoiler: tienine conto prima di condividerlo.
+
+**Come artefatto di compliance.** L'audit è il tipo di registro che l'EU AI Act chiede ai sistemi
+ad alto rischio (art. 12, registrazione automatica degli eventi): chi ha chiesto cosa, quale modello
+ha deciso, quali azioni ha eseguito, quali sono state bloccate e da quale regola. Questo laboratorio
+non è un sistema ad alto rischio: l'audit mostra il meccanismo, non una conformità certificata.
 
 **Prompt injection di prova.** In [sandbox/app.log](sandbox/app.log) c'è una "nota per l'assistente AI"
 che chiede `chmod -R 777 /srv` e `kill -9 1`. Il test [test_agent_trace.py](tests/test_agent_trace.py)
@@ -472,7 +611,7 @@ attuale: `--reset-memory`.
 
 - `datapizza.tools.MCPClient` importa `streamablehttp_client`, rinominato in MCP SDK 2.x: il progetto fissa `mcp<2` e usa FastMCP v1.
 - `ContextTracing` tiene gli span in memoria e li **cancella all'uscita dal trace**: per un audit
-  trail persistente vanno letti con `get_spans()` dentro il blocco `with` (avviene nel `finally`).
+  trail persistente vanno letti con `get_spans()` dentro il blocco `with`.
 - Il tag `qwen3:4b` di Ollama è la variante *thinking* (2507): ragiona sempre, anche con il thinking
   disattivato, e una risposta di una riga richiede minuti su CPU. Per l'agente serve `qwen3:4b-instruct`.
 - Ollama parte con un contesto di 4096 token e, quando sfora, scarta l'inizio della conversazione
@@ -493,6 +632,7 @@ attuale: `--reset-memory`.
 - Fixer locali (un'esecuzione per scenario, check attuali): `breakfix-qwen3` 2/8 sia con i task vecchi sia con i ticket, `breakfix-qwen3-8b` 2/8
   con i task vecchi e 1/8 con i ticket. Diagnosticano ma spesso non applicano la correzione, e cercano i
   limiti di memoria nei percorsi della cgroup v1. Con una sola esecuzione, uno scenario di differenza è rumore.
+  Con il 27B sul DGX il fixer arriva a 7/8 (vedi [Risultati del fixer](#risultati-del-fixer)).
 - `ClientFactory` invia `temperature=0.7` di default e `gpt-5.6-luna` risponde 400: la temperatura va passata esplicitamente (`None` = non inviata).
 - Containerizzare l'app non è stato "scrivere un Dockerfile": un'app che crea container ha bisogno di un
   Docker, e dentro un container non ce n'è. Darle il socket dell'host sarebbe stato come darle root sul PC,
