@@ -44,9 +44,9 @@ Se avevi già avviato Compose prima di creare il file `.env`, esegui nuovamente
 `docker compose up --build -d` per applicare la configurazione. Per fermare l'app usa
 `docker compose down`.
 
-> **Attenzione:** «Fallo risolvere all'AI» ricrea la sandbox rotta da capo: le modifiche
-> fatte nel terminale fino a quel momento vanno perse. La pagina chiede conferma prima
-> di procedere.
+> **Attenzione:** dopo aver risolto un ticket compare «Confronta con l'AI». Guardare il
+> confronto non tocca la sandbox; «Rilancia l'AI adesso» invece la ricrea rotta da capo e le
+> modifiche fatte nel terminale vanno perse. La pagina chiede conferma prima di procedere.
 
 ### Dove trovare cosa
 
@@ -259,11 +259,18 @@ un host che non è datapizza: elenca il tool, esegue un comando, riceve il blocc
   terminale e quanti indizi sono aperti; se il guardrail sostituisce una risposta, la pagina lo dice.
   La conversazione è la stessa di `breakfix-tutor` e riparte con un ticket nuovo.
 
-Nelle challenge puoi anche scegliere **Fallo risolvere all'AI**. Il fixer riparte da una
-sandbox nuova con lo stesso guasto: le modifiche che hai fatto fino a quel momento
-vengono perse. La pagina mostra i comandi via via che vengono eseguiti, la risposta
-dell'agente e il verdetto di `check.sh`, insieme a durata, chiamate e token. Il risultato
-può essere un FAIL: l'agente non riesce necessariamente a risolvere ogni scenario.
+Dopo il PASS su un ticket compare **Confronta con l'AI**: come ha affrontato lo stesso ticket il
+fixer. Compare solo a ticket risolto, perché mostra la soluzione: prima, renderebbe inutile il
+guardrail del tutor. La pagina mostra subito l'ultima esecuzione salvata da `breakfix-eval` su quel
+ticket (la più recente riuscita, altrimenti la più recente), senza toccare la sandbox: i comandi
+uno per uno, quelli bloccati dal guardrail, la risposta dell'agente e il verdetto di `check.sh`,
+con durata, chiamate e token, e quanti comandi hai usato tu. Il risultato può essere un FAIL:
+l'agente non riesce necessariamente a risolvere ogni scenario. Senza un'esecuzione salvata (i
+report stanno in `.breakfix/eval/`, che non è nel repo) il riquadro lo dice.
+
+Da lì **Rilancia l'AI adesso** fa lavorare il fixer dal vivo: riparte da una sandbox nuova con lo
+stesso guasto, quindi le modifiche fatte fino a quel momento vengono perse, e la pagina segue i
+comandi via via che vengono eseguiti.
 
 Ogni pagina ha il suo indirizzo (`#/basi/5/2`, `#/challenge/3`): ricaricando si resta lì, e la sandbox
 riparte solo se l'esercizio o il ticket non è già quello attivo. Il progresso (esercizi superati, ticket

@@ -9,7 +9,8 @@ Fa quello che fa la CLI `breakfix-sandbox` (list, start, lessons, learn, shell, 
 Come nella shell della CLI, chi si esercita è root e i comandi non passano dal guardrail:
 il guardrail protegge dagli agenti, non da chi si esercita. Il verdetto lo dà sempre check.sh.
 
-Il pulsante "Fallo risolvere all'AI" lancia sul ticket attivo la stessa prova di `breakfix-eval`
+Dopo aver risolto un ticket, "Confronta con l'AI" mostra come l'ha affrontato il fixer: l'ultima prova
+salvata da `breakfix-eval`, senza toccare la sandbox. Da lì si può anche rilanciare il fixer dal vivo
 (sandbox rotta da capo -> fixer -> check.sh), e la pagina ne segue i comandi mentre lavora.
 
 Una shell di root nella sandbox non va esposta: il server ascolta solo su 127.0.0.1, e le
@@ -22,15 +23,17 @@ Si avvia con `breakfix-ui`.
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import contextlib
 import json
 import os
+import re
 import secrets
 import subprocess
 import threading
 import webbrowser
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -44,11 +47,12 @@ from starlette.datastructures import Headers
 from pydantic import BaseModel, Field
 
 from breakfix import lessons, sandbox, tutor
-from breakfix.agent import AgentRunError, build_llm_client, utf8_console
-from breakfix.evaluate import evaluate_scenario
+from breakfix.agent import AgentRunError, build_llm_client, default_audit_dir, utf8_console
+from breakfix.evaluate import EVAL_DIR, evaluate_scenario
 from breakfix.guardrail import BLOCKED_PREFIX
 from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
 from breakfix.lessons import Exercise, LessonLab
+from breakfix.sandbox import DockerSandbox
 
 
 DEFAULT_PORT = 8000
@@ -178,7 +182,7 @@ def _active() -> Scenario | None:
         return None
 
 
-# --- "Fallo risolvere all'AI": il fixer sul ticket attivo, seguito dalla pagina ---------------
+# --- "Confronta con l'AI": il fixer sul ticket attivo, dall'ultima prova salvata o dal vivo -----
 
 MAX_STEP_OUTPUT = 2000  # caratteri di output per comando mostrati nella pagina (l'audit ha tutto)
 
@@ -208,7 +212,7 @@ class FixerRun:
     task: asyncio.Task | None = None
 
     def view(self) -> dict[str, Any]:
-        return {"status": self.status, "steps": self.steps, "result": self.result, "error": self.error}
+        return {"status": self.status, "steps": self.steps, "result": self.result, "error": self.error, "saved": None}
 
 
 # Una sola esecuzione per volta: c'è una sola sandbox.
@@ -231,19 +235,53 @@ async def _run_fixer(run: FixerRun, scenario: Scenario, client: Any) -> None:
     except Exception as exc:  # es. Docker giù: senza sandbox non c'è nemmeno il verdetto
         run.status, run.error = "error", f"{type(exc).__name__}: {exc}"
         return
-    run.result = {
-        "passed": row.passed,
-        "check_output": row.check_output,
-        "answer": row.answer,
-        "error": row.error,  # il fixer si è fermato a metà (es. modello non raggiungibile): il check vale comunque
-        "tool_calls": row.tool_calls,
-        "blocked_by_guardrail": row.blocked_by_guardrail,
-        "llm_calls": row.llm_calls,
-        "tokens": row.tokens,
-        "duration_s": row.duration_s,
-        "audit": Path(row.audit_path).name,
-    }
+    run.result = _result_view(asdict(row))
     run.status = "done"
+
+
+def _result_view(row: dict[str, Any]) -> dict[str, Any]:
+    """Verdetto e numeri di una prova del fixer (una riga di `breakfix-eval`), come li mostra la pagina."""
+    # error: il fixer si è fermato a metà (es. modello non raggiungibile): il check vale comunque.
+    keys = ("passed", "check_output", "answer", "error", "tool_calls", "blocked_by_guardrail", "llm_calls",
+            "tokens", "duration_s")
+    # Solo il nome del file: il report può essere stato scritto su un altro sistema (Windows, o il container).
+    return {**{key: row.get(key) for key in keys}, "audit": re.split(r"[\\/]", str(row["audit_path"]))[-1]}
+
+
+def saved_run(scenario_id: str) -> dict[str, Any] | None:
+    """L'ultima prova di `breakfix-eval` su questo scenario: la più recente riuscita, altrimenti la più
+    recente. Il verdetto e i numeri vengono dal report, i comandi dal suo audit trail."""
+    rows = []
+    for path in sorted(EVAL_DIR.glob("[0-9]*.json"), reverse=True):  # i report del fixer, dal più recente
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+            rows += [(report, row) for row in report["rows"] if row["scenario"] == scenario_id]
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    if not rows:
+        return None
+    report, row = next((pair for pair in rows if pair[1].get("passed")), rows[0])
+    result = _result_view(row)
+    try:
+        audit_run = json.loads((default_audit_dir() / result["audit"]).read_text(encoding="utf-8"))
+        # Nell'audit gli argomenti del tool sono il repr del dizionario: {'command': '...'}.
+        steps = [fixer_step(ast.literal_eval(s["attributes"]["tool_arguments"]), s["attributes"]["tool_result"])
+                 for s in audit_run["spans"] if s["type"] == "tool"]
+        # I report più vecchi non hanno la risposta dell'agente: è comunque nell'audit.
+        result["answer"] = result["answer"] or audit_run.get("final_answer")
+    except (OSError, ValueError, KeyError, SyntaxError, AttributeError):  # audit cancellato o di un'altra forma
+        steps = []
+    return {"status": "done", "steps": steps, "result": result, "error": None,
+            "saved": {"model": report.get("model"), "written_at": report.get("written_at")}}
+
+
+def commands_typed() -> int | None:
+    """Quanti comandi ha lanciato chi si esercita in questa sandbox (la history di bash): per il confronto."""
+    try:
+        result = DockerSandbox().exec("wc -l < /root/.bash_history")
+    except OSError:  # Docker non installato
+        return None
+    return int(result.stdout) if result.exit_code == 0 and result.stdout.strip().isdigit() else None
 
 
 app = FastAPI(title="Sysadmin Shock")
@@ -366,16 +404,22 @@ async def ask_tutor(request: TutorRequest) -> dict[str, Any]:
 
 
 @app.get("/api/fixer")
-async def fixer_status() -> dict[str, Any] | None:
-    """L'esecuzione del fixer sul ticket attivo: la pagina la interroga finché è in corso."""
+def fixer_status() -> dict[str, Any] | None:
+    """Il fixer sul ticket attivo, per "Confronta con l'AI": l'esecuzione dal vivo se c'è (la pagina la
+    interroga finché è in corso), altrimenti l'ultima salvata da `breakfix-eval`, senza toccare la sandbox.
+
+    Contiene la soluzione: come per gli indizi, è la pagina a mostrarla solo dopo che il ticket è risolto.
+    """
     run = _fixer
-    if run is None:
+    if run is not None and run.status == "running":
+        return run.view()
+    scenario = _active()
+    if scenario is None:
         return None
-    if run.status != "running":  # finita: vale solo per il ticket su cui è stata fatta
-        scenario = await asyncio.to_thread(_active)
-        if scenario is None or scenario.id != run.scenario:
-            return None
-    return run.view()
+    if run is not None and run.scenario == scenario.id:  # finita: vale solo per il ticket su cui è stata fatta
+        return run.view()
+    saved = saved_run(scenario.id)
+    return {**saved, "your_commands": commands_typed()} if saved else None
 
 
 @app.post("/api/fixer", status_code=202, dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
