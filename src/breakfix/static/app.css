@@ -317,6 +317,8 @@ code {
 
 #fixer { margin: 10px 0; }
 #fixer-status { margin: 10px 0 0; color: var(--amber); font-family: var(--mono); }
+#fixer-saved { margin: 10px 0 0; font-family: var(--mono); }
+.fixer-live { margin: 14px 0 8px; }
 .fixer-steps { margin: 10px 0 0; padding-left: 26px; }
 .fixer-steps li { margin: 0 0 8px; }
 .fixer-steps li::marker { color: var(--muted); font: 12px var(--mono); }

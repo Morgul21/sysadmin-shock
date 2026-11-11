@@ -252,10 +252,9 @@ function render(view) {
   renderHints();
   $("tutor").hidden = !isTicket;
   if (isTicket) loadTutor();
-  $("fixer").hidden = !isTicket;
   stopFixerPolling();
-  if (isTicket) loadFixer();
-  else renderFixer(null);
+  $("fixer").open = false;
+  showFixer();
   $("work").hidden = false;
   // L'indirizzo segue quello che è attivo (es. il primo esercizio scelto in automatico).
   const hash = isTicket ? `#/challenge/${view.number}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
@@ -365,10 +364,30 @@ async function askTutor(event) {
   }
 }
 
-// --- "Fallo risolvere all'AI": il fixer lavora sul server, la pagina ne segue i comandi ----------
+// --- "Confronta con l'AI": come ha risolto il ticket il fixer. Mostra la soluzione, quindi compare solo
+// dopo che il ticket è risolto. Di solito è l'ultima esecuzione salvata (subito, senza toccare la
+// sandbox); da lì si può rilanciare il fixer dal vivo, e la pagina ne segue i comandi.
 
 const FIXER_POLL_MS = 1500;
 let fixerTimer = null;
+
+function showFixer() {
+  const solved = current.kind === "ticket" && isDone("tickets", current.number);
+  $("fixer").hidden = !solved;
+  if (solved) loadFixer();
+  else renderFixer(null);
+}
+
+const nCommands = (n) => `${n} comand${n === 1 ? "o" : "i"}`;
+
+// Da dove viene quello che si vede: un'esecuzione salvata (con il confronto dei comandi) o nessuna.
+function fixerSource(run) {
+  if (!run) return "Non c'è ancora un'esecuzione salvata per questo ticket (le crea breakfix-eval): puoi lanciare l'AI adesso.";
+  if (!run.saved) return "";
+  const date = new Date(run.saved.written_at).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+  const compare = run.your_commands ? ` Tu hai lanciato ${nCommands(run.your_commands)}, l'AI ${run.result.tool_calls}.` : "";
+  return `Esecuzione salvata del ${date}, modello ${run.saved.model}.${compare}`;
+}
 
 function fixerStep(step) {
   const tag = step.blocked
@@ -383,12 +402,14 @@ function fixerStep(step) {
 function renderFixer(run) {
   const running = run?.status === "running";
   $("fixer-start").disabled = running;
-  $("fixer-start").textContent = running ? "L'AI sta lavorando…" : run ? "Fallo riprovare all'AI" : "Fallo risolvere all'AI";
+  $("fixer-start").textContent = running ? "L'AI sta lavorando…" : run ? "Rilancia l'AI adesso" : "Lancia l'AI adesso";
+  $("fixer-saved").textContent = fixerSource(run);
+  $("fixer-saved").hidden = !$("fixer-saved").textContent;
   $("fixer-steps").innerHTML = (run?.steps || []).map(fixerStep).join("");
   $("fixer-status").hidden = !(running || run?.status === "error");
   if (running) {
     const n = run.steps.length;
-    $("fixer-status").textContent = n ? `L'AI ha lanciato ${n} comand${n === 1 ? "o" : "i"} finora…`
+    $("fixer-status").textContent = n ? `L'AI ha lanciato ${nCommands(n)} finora…`
       : "Riparto dalla sandbox rotta e l'AI legge il ticket…";
   } else if (run?.status === "error") {
     $("fixer-status").textContent = `L'AI non è arrivata al verdetto: ${run.error}`;
@@ -434,7 +455,7 @@ async function loadFixer() {
   try {
     const run = await api("/api/fixer");
     renderFixer(run);
-    $("fixer").open = $("fixer").open || Boolean(run);
+    if (run && !run.saved) $("fixer").open = true; // un'esecuzione dal vivo, in corso o appena finita
     if (run?.status === "running") pollFixer();
   } catch {
     renderFixer(null);
@@ -497,6 +518,8 @@ async function check() {
         renderStepper(lessons.find((l) => l.number === current.lesson.number), current.key);
       } else {
         markDone("tickets", current.number);
+        // Ticket risolto: ora si può vedere come l'ha fatto l'AI, con il conto dei tuoi comandi aggiornato.
+        if (!fixerTimer) showFixer();
       }
       offerNext();
     }

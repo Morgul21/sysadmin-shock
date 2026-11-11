@@ -1,15 +1,63 @@
 # Sysadmin Shock
 
-Una palestra per imparare il troubleshooting Linux **da soli**: uno scenario rompe apposta
-una sandbox Docker isolata (permessi e memoria), **l'utente** ci entra con una shell e la ripara,
-uno script di check dice **pass/fail**. Nessuno ripara al posto dell'utente:
+Una palestra per imparare a usare Linux e a risolvere problemi di sistema. Parti da
+lezioni pratiche oppure affronti una **challenge**: un piccolo server in un container
+Docker viene rotto apposta e tu provi a rimetterlo in funzione.
 
-- gli **indizi** sono graduali (dove guardare, come verificarlo, la causa), con riferimenti alle man
-  page, e non danno mai il comando di fix. Sono scritti a mano;
-- il **tutor** è un agente a cui chiedere aiuto: conosce la soluzione, vede gli ultimi comandi lanciati
-  e adatta gli indizi a dove si è arrivati. Un guardrail di output gli impedisce di dare il fix;
-- il **fixer** è un agente che risolve ogni scenario in autonomia: dimostra che si può risolvere ed è il
-  riferimento con cui l'utente può confrontarsi (passi, costo). È anche la base dell'eval di traiettoria.
+Per ogni challenge ricevi un ticket, un terminale e indizi graduali. Se ti blocchi, puoi
+chiedere aiuto a un tutor AI; quando pensi di aver risolto, uno script verifica il
+risultato. Puoi anche chiedere a un altro agente, il **fixer**, di provare a risolvere il
+ticket e osservare i suoi passaggi.
+
+Il tutor è istruito a non darti la soluzione e un controllo prova a bloccare i comandi
+che la rivelano. **Non è una garanzia assoluta:** una soluzione espressa in altri modi
+può sfuggire al controllo.
+
+## Inizia da qui
+
+Per usare l'interfaccia nel browser, avvia Docker Desktop ed esegui dalla cartella del
+progetto:
+
+```powershell
+docker compose up --build -d
+```
+
+Il primo avvio costruisce le immagini e può richiedere qualche minuto. Poi:
+
+1. Apri **http://localhost:8000**.
+2. Scegli una lezione in **Basi** oppure un ticket in **Challenge**.
+3. Usa il terminale della pagina; se ti serve, apri gli indizi o chiedi al tutor.
+4. Premi **Verifica** per sapere se hai raggiunto il risultato richiesto.
+
+Il tutor e il fixer richiedono anche un modello configurato e raggiungibile. Per usare
+Qwen in locale con Ollama, copia la configurazione d'esempio e prepara il modello:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+ollama pull qwen3:8b
+ollama create breakfix-qwen3-8b -f ollama/Modelfile.8b
+```
+
+Ollama deve essere in esecuzione sul PC. Il comando non sovrascrive un `.env` già
+presente: controlla la [configurazione](#configurazione) se usi impostazioni diverse.
+Se avevi già avviato Compose prima di creare il file `.env`, esegui nuovamente
+`docker compose up --build -d` per applicare la configurazione. Per fermare l'app usa
+`docker compose down`.
+
+> **Attenzione:** dopo aver risolto un ticket compare «Confronta con l'AI». Guardare il
+> confronto non tocca la sandbox; «Rilancia l'AI adesso» invece la ricrea rotta da capo e le
+> modifiche fatte nel terminale vanno perse. La pagina chiede conferma prima di procedere.
+
+### Dove trovare cosa
+
+- [Installazione locale e comandi CLI](#installazione)
+- [Come funziona l'interfaccia](#interfaccia-web)
+- [Architettura e file principali](#architettura)
+- [Lezioni ed esercizi](#basi)
+- [Scenari](#scenari) — contiene spoiler sulle cause dei problemi
+- [Sicurezza e limiti](#sicurezza)
+- [Eval del tutor e risultati](#eval-del-tutor)
+- [Roadmap e note tecniche](#roadmap)
 
 ## Architettura
 
@@ -162,6 +210,19 @@ breakfix-sandbox down
   comando del fix), *Chiedi al tutor* e il pulsante *Verifica*. Il tutor vede i comandi lanciati nel
   terminale e quanti indizi sono aperti; se il guardrail sostituisce una risposta, la pagina lo dice.
   La conversazione è la stessa di `breakfix-tutor` e riparte con un ticket nuovo.
+
+Dopo il PASS su un ticket compare **Confronta con l'AI**: come ha affrontato lo stesso ticket il
+fixer. Compare solo a ticket risolto, perché mostra la soluzione: prima, renderebbe inutile il
+guardrail del tutor. La pagina mostra subito l'ultima esecuzione salvata da `breakfix-eval` su quel
+ticket (la più recente riuscita, altrimenti la più recente), senza toccare la sandbox: i comandi
+uno per uno, quelli bloccati dal guardrail, la risposta dell'agente e il verdetto di `check.sh`,
+con durata, chiamate e token, e quanti comandi hai usato tu. Il risultato può essere un FAIL:
+l'agente non riesce necessariamente a risolvere ogni scenario. Senza un'esecuzione salvata (i
+report stanno in `.breakfix/eval/`, che non è nel repo) il riquadro lo dice.
+
+Da lì **Rilancia l'AI adesso** fa lavorare il fixer dal vivo: riparte da una sandbox nuova con lo
+stesso guasto, quindi le modifiche fatte fino a quel momento vengono perse, e la pagina segue i
+comandi via via che vengono eseguiti.
 
 Ogni pagina ha il suo indirizzo (`#/basi/5/2`, `#/challenge/3`): ricaricando si resta lì, e la sandbox
 riparte solo se l'esercizio o il ticket non è già quello attivo. Il progresso (esercizi superati, ticket

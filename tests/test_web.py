@@ -298,7 +298,8 @@ class TutorApiTest(unittest.TestCase):
 
 
 class FixerApiTest(unittest.TestCase):
-    """Il pulsante "Fallo risolvere all'AI": modello scriptato, sandbox mock (anche per il server MCP), lab finto."""
+    """ "Confronta con l'AI": modello scriptato, sandbox mock (anche per il server MCP), lab finto.
+    Report degli eval e audit vanno in una cartella temporanea, all'inizio vuota."""
 
     def setUp(self) -> None:
         from functools import partial
@@ -309,13 +310,16 @@ class FixerApiTest(unittest.TestCase):
 
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
+        self.eval_dir = Path(tmp.name) / "eval"
         self.lab = FakeLab(passed=True)
         self.model = ScriptedClient(
             commands=["ls -l /srv/app", "chmod 777 /srv/app/run.sh", "chmod 755 /srv/app/run.sh"],
             answer="Causa: run.sh senza bit di esecuzione. Correzione: chmod 755. Verifica: gestionale parte.",
         )
         for patch in (
-            mock.patch.dict("os.environ", {"BREAKFIX_SANDBOX": "mock"}),
+            mock.patch.dict("os.environ", {"BREAKFIX_SANDBOX": "mock", "BREAKFIX_AUDIT_DIR": tmp.name}),
+            mock.patch.object(web, "EVAL_DIR", self.eval_dir),
+            mock.patch.object(web, "commands_typed", return_value=5),
             mock.patch.object(web, "_fixer", None),
             mock.patch.object(web, "DockerLab", lambda: self.lab),
             mock.patch.object(web, "build_llm_client", side_effect=lambda: self.model),
@@ -378,6 +382,42 @@ class FixerApiTest(unittest.TestCase):
         self._wait()
         with mock.patch("breakfix.sandbox.active_scenario", return_value="memory-hog"):
             self.assertIsNone(self.client.get("/api/fixer").json())
+
+    def test_without_a_live_run_the_saved_one_is_shown(self) -> None:
+        import asyncio
+        import json
+
+        from breakfix.evaluate import evaluate_scenario, write_report
+        from breakfix.lab import get_scenario
+
+        # Una prova di `breakfix-eval` come le scrive lui: il report negli eval, i comandi nell'audit.
+        row = asyncio.run(evaluate_scenario(get_scenario("run-sh-noexec"), self.model, self.lab))
+        write_report([row], "modello-di-prova", self.eval_dir)
+
+        saved = self.client.get("/api/fixer").json()
+        self.assertEqual(saved["status"], "done")
+        self.assertEqual(saved["saved"]["model"], "modello-di-prova")
+        self.assertEqual([s["command"] for s in saved["steps"]],
+                         ["ls -l /srv/app", "chmod 777 /srv/app/run.sh", "chmod 755 /srv/app/run.sh"])
+        self.assertEqual([s["blocked"] for s in saved["steps"]], [False, True, False])
+        self.assertTrue(saved["result"]["passed"])
+        self.assertEqual((saved["result"]["tool_calls"], saved["your_commands"]), (3, 5))
+        self.assertEqual(self.lab.started, ["run-sh-noexec"])  # solo l'eval: guardare non riavvia la sandbox
+
+        # Una prova più recente ma fallita non sostituisce quella riuscita; da sola, si vede quella.
+        failed = {"model": "modello-peggiore", "written_at": "2099-12-31T00:00:00+00:00",
+                  "rows": [{"scenario": "run-sh-noexec", "passed": False, "audit_path": "C:\\altrove\\manca.json"}]}
+        (self.eval_dir / "20991231-000000.json").write_text(json.dumps(failed), encoding="utf-8")
+        self.assertEqual(self.client.get("/api/fixer").json()["saved"]["model"], "modello-di-prova")
+        for report in self.eval_dir.glob("20[0-8]*.json"):
+            report.unlink()
+        alone = self.client.get("/api/fixer").json()
+        self.assertEqual((alone["saved"]["model"], alone["result"]["passed"], alone["steps"]),
+                         ("modello-peggiore", False, []))
+
+        # L'esecuzione dal vivo, quando c'è, vale più di quella salvata.
+        self.client.post("/api/fixer")
+        self.assertIsNone(self._wait()["saved"])
 
 
 if __name__ == "__main__":
