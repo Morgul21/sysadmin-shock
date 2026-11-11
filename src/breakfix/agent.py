@@ -59,10 +59,22 @@ OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 # Ancorati alla root del progetto, non alla cartella da cui si lancia il comando.
 STATE_DIR = Path(__file__).resolve().parents[2] / ".breakfix"
-MEMORY_PATH = Path(os.getenv("BREAKFIX_MEMORY", STATE_DIR / "memory.json"))
-AUDIT_DIR = Path(os.getenv("BREAKFIX_AUDIT_DIR", STATE_DIR / "audit"))
-# I modelli più grandi verificano di più prima di agire: qwen3.8-27b usa 10-14 passi dove l'8B ne usa 4-6.
-MAX_STEPS = int(os.getenv("BREAKFIX_MAX_STEPS", "20"))
+
+
+# Lette quando servono, non all'import: i comandi caricano il .env in main(), dopo gli import.
+def memory_path() -> Path:
+    return Path(os.getenv("BREAKFIX_MEMORY") or STATE_DIR / "memory.json")
+
+
+def default_audit_dir() -> Path:
+    return Path(os.getenv("BREAKFIX_AUDIT_DIR") or STATE_DIR / "audit")
+
+
+def max_steps() -> int:
+    # I modelli più grandi verificano di più prima di agire: qwen3.8-27b usa 10-14 passi dove l'8B ne usa 4-6.
+    return int(os.getenv("BREAKFIX_MAX_STEPS") or 20)
+
+
 # Quante volte rilanciare un modello che si ferma con un testo che non è la risposta finale.
 MAX_NUDGES = 2
 NUDGE = ("Non hai ancora concluso: hai scritto il prossimo passo senza eseguirlo. Continua chiamando "
@@ -122,14 +134,15 @@ def mcp_server_client() -> MCPClient:
 
 def load_memory() -> Memory:
     memory = Memory()
-    if MEMORY_PATH.exists():
-        memory.json_loads(MEMORY_PATH.read_text(encoding="utf-8"))
+    if (path := memory_path()).exists():
+        memory.json_loads(path.read_text(encoding="utf-8"))
     return memory
 
 
 def save_memory(memory: Memory) -> None:
-    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    MEMORY_PATH.write_text(memory.json_dumps(), encoding="utf-8")
+    path = memory_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(memory.json_dumps(), encoding="utf-8")
 
 
 async def list_tools() -> None:
@@ -162,7 +175,7 @@ async def _run_until_concluded(task: str, client: Client, tools: list, memory: M
     """Il runner chiude al primo turno di solo testo. I modelli locali a volte ne scrivono uno a metà
     lavoro ("Let's see how much memory is in use.") senza chiamare il tool: in quel caso li facciamo
     continuare, nello stesso budget di passi."""
-    steps_left, prompt = MAX_STEPS, task
+    steps_left, prompt = max_steps(), task
     for _ in range(MAX_NUDGES + 1):
         agent = Agent(name="fixer", client=client, system_prompt=SYSTEM_PROMPT, tools=tools,
                       max_steps=steps_left, stateless=False)
@@ -190,7 +203,7 @@ def _observed(func: Callable, on_tool: ToolObserver) -> Callable:
 
 
 async def run_agent(
-    task: str, client: Client, memory: Memory, audit_dir: Path = AUDIT_DIR, on_tool: ToolObserver | None = None
+    task: str, client: Client, memory: Memory, audit_dir: Path | None = None, on_tool: ToolObserver | None = None
 ) -> tuple[AgentRunnerResult, Path]:
     """Esegue il fixer dentro un trace e ne salva l'audit, anche se l'esecuzione fallisce."""
     result = None
@@ -207,7 +220,7 @@ async def run_agent(
             error = _root_cause(exc)
         # Va letto qui dentro: all'uscita dal trace ContextTracing scarta gli span.
         audit_path = audit.write_run(
-            audit_dir,
+            audit_dir or default_audit_dir(),
             trace_id=current.trace_id,
             spans=current.get_spans(),
             task=task,
@@ -251,7 +264,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.reset_memory:
-        MEMORY_PATH.unlink(missing_ok=True)
+        memory_path().unlink(missing_ok=True)
         print("Memory cancellata")
     if args.list_tools:
         asyncio.run(list_tools())

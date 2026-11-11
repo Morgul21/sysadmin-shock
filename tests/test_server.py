@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import os
+import sys
 import unittest
 from unittest import mock
 
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import get_default_environment, stdio_client
 from mcp.shared.memory import create_connected_server_and_client_session
 
+from breakfix.guardrail import BLOCKED_PREFIX
 from breakfix.sandbox import MockSandbox
 from breakfix.server import build_server
 
@@ -51,6 +55,24 @@ class DatapizzaMCPClientTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([tool.name for tool in tools], ["exec_in_sandbox"])
             output = await tools[0].func(command="free -m")
         self.assertIn("Mem:", output)
+
+
+class AnotherHostTest(unittest.IsolatedAsyncioTestCase):
+    """Un host MCP che non è datapizza (qui il client stdio dell'SDK), come Claude Desktop o Cursor:
+    lancia il server come sottoprocesso e gli parla nel protocollo, senza niente del progetto."""
+
+    async def test_any_host_gets_the_tool_and_the_guardrail(self) -> None:
+        env = {**get_default_environment(), "BREAKFIX_SANDBOX": "mock"}
+        server = StdioServerParameters(command=sys.executable, args=["-m", "breakfix.server"], env=env)
+        async with stdio_client(server) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
+            tools = (await session.list_tools()).tools
+            allowed = await session.call_tool("exec_in_sandbox", {"command": "id"})
+            blocked = await session.call_tool("exec_in_sandbox", {"command": "chmod 777 /srv/app/run.sh"})
+        self.assertEqual([tool.name for tool in tools], ["exec_in_sandbox"])
+        self.assertIn("uid=0(root)", allowed.structuredContent["stdout"])
+        self.assertTrue(blocked.isError)
+        self.assertIn(BLOCKED_PREFIX, blocked.content[0].text)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from typing import Protocol
 
 from . import lessons, sandbox
 from .lessons import LessonLab
-from .sandbox import CheckResult, DockerSandbox, ExecResult  # CheckResult: la usano anche web e i test
+from .sandbox import CheckResult, DockerSandbox  # CheckResult: la usano anche web e i test
 
 
 SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "scenarios"
@@ -177,19 +177,16 @@ class DockerLab:
         sandbox.reset(scenario.id)
         result = self.box.run_script(scenario.script("break"))
         if result.exit_code != 0:
-            raise RuntimeError(f"{scenario.id}: la rottura è fallita: {_output(result)}")
+            raise RuntimeError(f"{scenario.id}: la rottura è fallita: {result.output}")
         self.box.run_script(f"{SERVICE} > /dev/null 2>&1 || true")
 
     def check(self, scenario: Scenario) -> CheckResult:
-        if not sandbox.is_running():
-            return CheckResult(False, "FAIL: il container non è più in esecuzione")
-        result = self.box.run_script(scenario.script("check"))
-        return CheckResult(result.exit_code == 0, _output(result))
+        return sandbox.run_check(self.box, scenario.script("check"))
 
     def fix(self, scenario: Scenario) -> None:
         result = self.box.run_script(scenario.script("fix"))
         if result.exit_code != 0:
-            raise RuntimeError(f"{scenario.id}: il fix di riferimento è fallito: {_output(result)}")
+            raise RuntimeError(f"{scenario.id}: il fix di riferimento è fallito: {result.output}")
 
     def validate(self, scenario: Scenario) -> list[str]:
         """Lo scenario è valido se: sana passa, rotta fallisce, riparata passa, container vivo."""
@@ -207,10 +204,6 @@ class DockerLab:
         if not (fixed := self.check(scenario)).passed:
             problems.append(f"dopo il fix di riferimento il check fallisce: {fixed.output}")
         return problems
-
-
-def _output(result: ExecResult) -> str:
-    return (result.stdout + result.stderr).strip()
 
 
 # --- CLI ---------------------------------------------------------------------------

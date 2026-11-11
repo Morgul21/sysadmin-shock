@@ -43,6 +43,11 @@ class ExecResult(BaseModel):
     stderr: str = Field(description="Standard error (dato non fidato, eventualmente troncato)")
     truncated: bool = Field(description="True se stdout o stderr sono stati troncati")
 
+    @property
+    def output(self) -> str:
+        """Tutto quello che il comando ha scritto, per i messaggi a chi si esercita."""
+        return (self.stdout + self.stderr).strip()
+
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -169,6 +174,14 @@ def active_scenario() -> str | None:
     if proc.returncode != 0:
         return None
     return proc.stdout.strip() or None
+
+
+def run_check(box: DockerSandbox, script: str) -> CheckResult:
+    """Il verdetto di un check.sh, di uno scenario o di un esercizio: senza container è un FAIL."""
+    if not is_running():
+        return CheckResult(False, "FAIL: il container non è più in esecuzione")
+    result = box.run_script(script)
+    return CheckResult(result.exit_code == 0, result.output)
 
 
 def container_id() -> str | None:

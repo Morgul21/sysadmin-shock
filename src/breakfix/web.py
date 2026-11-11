@@ -32,7 +32,7 @@ import threading
 import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import docker
 from dotenv import load_dotenv
@@ -51,9 +51,6 @@ from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scen
 from breakfix.lessons import Exercise, LessonLab
 
 
-# Solo 127.0.0.1: la UI dà una shell di root nella sandbox. In un container serve 0.0.0.0
-# (BREAKFIX_UI_HOST), e a limitare l'accesso al solo PC è la porta pubblicata su 127.0.0.1 (compose.yaml).
-HOST = os.getenv("BREAKFIX_UI_HOST", "127.0.0.1")
 DEFAULT_PORT = 8000
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DOCKER_ERRORS = (RuntimeError, subprocess.CalledProcessError, FileNotFoundError, docker.errors.DockerException)
@@ -292,56 +289,58 @@ def active() -> dict[str, Any] | None:
     return scenario_view(scenario) if scenario else None
 
 
-@app.post("/api/start/{number}", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
-async def start(number: int) -> dict[str, Any]:
+# Le funzioni qui sotto che aspettano Docker sono `def` normali: FastAPI le esegue in un thread,
+# così mentre aspettano il server continua a servire il terminale.
+
+
+def _start_sandbox(find: Callable[[str], Any], key: str, start: Callable[[Any], None]) -> Any:
+    """Sandbox nuova per un ticket o un esercizio: 404 se non esiste, 503 se Docker non risponde."""
     global _fixer
     try:
-        scenario = get_scenario(str(number))
+        item = find(key)
     except KeyError as exc:
         raise HTTPException(404, exc.args[0]) from exc
     try:
-        await asyncio.to_thread(DockerLab().start, scenario)
+        start(item)
     except DOCKER_ERRORS as exc:
         raise HTTPException(503, f"avvio fallito: {exc}. Docker Desktop è avviato? "
                                  "L'immagine va buildata una volta con `breakfix-sandbox up`.") from exc
     _fixer = None  # sandbox nuova: quello che ha fatto l'AI su quella vecchia non vale più
-    return scenario_view(scenario)
+    return item
+
+
+@app.post("/api/start/{number}", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
+def start(number: int) -> dict[str, Any]:
+    return scenario_view(_start_sandbox(get_scenario, str(number), DockerLab().start))
 
 
 @app.post("/api/learn/{key}", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
-async def learn(key: str) -> dict[str, Any]:
-    global _fixer
-    try:
-        exercise = lessons.get_exercise(key)
-    except KeyError as exc:
-        raise HTTPException(404, exc.args[0]) from exc
-    try:
-        await asyncio.to_thread(LessonLab().start, exercise)
-    except DOCKER_ERRORS as exc:
-        raise HTTPException(503, f"avvio fallito: {exc}. Docker Desktop è avviato? "
-                                 "L'immagine va buildata una volta con `breakfix-sandbox up`.") from exc
-    _fixer = None
-    return exercise_view(exercise)
+def learn(key: str) -> dict[str, Any]:
+    return exercise_view(_start_sandbox(lessons.get_exercise, key, LessonLab().start))
 
 
 @app.post("/api/check", dependencies=[Depends(require_same_origin)])
-async def check(request: CheckRequest | None = None) -> dict[str, Any]:
+def check(request: CheckRequest | None = None) -> dict[str, Any]:
     if exercise := lessons.active_exercise():
-        answer = request.answer if request else None
-        result = await asyncio.to_thread(LessonLab().check, exercise, answer)
-        return {"passed": result.passed, "output": result.output}
-    scenario = _active()
-    if scenario is None:
+        result = LessonLab().check(exercise, request.answer if request else None)
+    elif scenario := _active():
+        result = DockerLab().check(scenario)
+    else:
         raise HTTPException(409, "nessun ticket o esercizio attivo")
-    result = await asyncio.to_thread(DockerLab().check, scenario)
     return {"passed": result.passed, "output": result.output}
 
 
 @app.get("/api/tutor")
-async def tutor_conversation() -> list[dict[str, Any]]:
+def tutor_conversation() -> list[dict[str, Any]]:
     """La conversazione con il tutor sulla sandbox attiva (vuota con un ticket nuovo)."""
-    container = await asyncio.to_thread(sandbox.container_id)
-    return tutor.load_conversation(container).transcript
+    return tutor.load_conversation(sandbox.container_id()).transcript
+
+
+def _llm_client(who: str) -> Any:
+    try:
+        return build_llm_client()
+    except SystemExit as exc:  # build_llm_client è pensata per la CLI: esce con il messaggio
+        raise HTTPException(503, f"{who} non configurato: {exc.code}") from exc
 
 
 @app.post("/api/tutor", dependencies=[Depends(require_same_origin)])
@@ -353,10 +352,7 @@ async def ask_tutor(request: TutorRequest) -> dict[str, Any]:
     container = await asyncio.to_thread(sandbox.container_id)
     conversation = tutor.load_conversation(container)
     commands = await asyncio.to_thread(tutor.recent_commands)
-    try:
-        client = build_llm_client()
-    except SystemExit as exc:  # build_llm_client è pensata per la CLI: esce con il messaggio
-        raise HTTPException(503, f"tutor non configurato: {exc.code}") from exc
+    client = _llm_client("tutor")
     try:
         reply = await tutor.ask(scenario, request.question, client, conversation.memory,
                                 commands=commands, hints_shown=request.hints_shown)
@@ -390,10 +386,7 @@ async def start_fixer() -> dict[str, Any]:
     scenario = await asyncio.to_thread(_active)
     if scenario is None:
         raise HTTPException(409, "l'AI ripara i ticket: avviane uno dalle Challenge")
-    try:
-        client = build_llm_client()
-    except SystemExit as exc:  # build_llm_client è pensata per la CLI: esce con il messaggio
-        raise HTTPException(503, f"modello non configurato: {exc.code}") from exc
+    client = _llm_client("modello")
     run = FixerRun(scenario=scenario.id)
     run.task = asyncio.create_task(_run_fixer(run, scenario, client))  # il riferimento la tiene viva
     _fixer = run
@@ -448,12 +441,15 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true", help="non aprire il browser")
     args = parser.parse_args()
+    # Solo 127.0.0.1: la UI dà una shell di root nella sandbox. In un container serve 0.0.0.0
+    # (BREAKFIX_UI_HOST), e a limitare l'accesso al solo PC è la porta pubblicata su 127.0.0.1 (compose.yaml).
+    host = os.getenv("BREAKFIX_UI_HOST") or "127.0.0.1"
     # 0.0.0.0 non si apre nel browser: dal PC la UI si raggiunge su localhost.
-    url = f"http://{'localhost' if HOST == '0.0.0.0' else HOST}:{args.port}"
+    url = f"http://{'localhost' if host == '0.0.0.0' else host}:{args.port}"
     print(f"Sysadmin Shock su {url} (Ctrl+C per fermare)")
     if not args.no_browser:
         threading.Timer(1.0, webbrowser.open, (url,)).start()
-    uvicorn.run(app, host=HOST, port=args.port, log_level="warning")
+    uvicorn.run(app, host=host, port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

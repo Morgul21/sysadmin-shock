@@ -36,7 +36,8 @@ from datapizza.tracing import ContextTracing
 from datapizza.type import ROLE, TextBlock
 
 from . import audit, sandbox
-from .agent import AUDIT_DIR, STATE_DIR, AgentRunError, _root_cause, build_llm_client, generation_kwargs, utf8_console
+from .agent import (STATE_DIR, AgentRunError, _root_cause, build_llm_client, default_audit_dir, generation_kwargs,
+                    utf8_console)
 from .lab import Scenario, get_scenario
 from .sandbox import DockerSandbox
 
@@ -176,7 +177,7 @@ async def ask(
     """Una domanda al tutor, dentro un trace: l'audit si scrive anche se il modello fallisce."""
     if not question.strip():
         raise ValueError("domanda vuota")
-    audit_dir = audit_dir or AUDIT_DIR
+    audit_dir = audit_dir or default_audit_dir()
     memory = memory if memory is not None else Memory()
     message = user_message(question[:MAX_QUESTION_CHARS], commands, hints_shown, scenario)
     raw = None

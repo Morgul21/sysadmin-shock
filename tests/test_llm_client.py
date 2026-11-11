@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from datapizza.clients.openai_like import OpenAILikeClient
 
+from breakfix import agent
 from breakfix.agent import MAX_OUTPUT_TOKENS, OLLAMA_BASE_URL, build_llm_client, generation_kwargs
 
 
@@ -40,6 +42,16 @@ class GenerationKwargsTest(unittest.TestCase):
             self.assertEqual(generation_kwargs(), {"max_tokens": MAX_OUTPUT_TOKENS})
         with llm_env(LLM_REASONING_EFFORT="none"):
             self.assertEqual(generation_kwargs()["reasoning_effort"], "none")
+
+
+class SettingsTest(unittest.TestCase):
+    def test_settings_set_after_import_are_used(self) -> None:
+        # Il .env viene caricato in main(), dopo gli import: le impostazioni vanno lette quando servono.
+        with mock.patch.dict(os.environ, {"BREAKFIX_MAX_STEPS": "7", "BREAKFIX_AUDIT_DIR": "altrove/audit",
+                                          "BREAKFIX_MEMORY": "altrove/memory.json"}):
+            self.assertEqual(agent.max_steps(), 7)
+            self.assertEqual(agent.default_audit_dir(), Path("altrove/audit"))
+            self.assertEqual(agent.memory_path(), Path("altrove/memory.json"))
 
 
 if __name__ == "__main__":

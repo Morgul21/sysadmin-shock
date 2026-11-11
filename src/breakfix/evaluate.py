@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from datapizza.core.clients.client import Client
 from datapizza.memory import Memory
 
-from .agent import AUDIT_DIR, STATE_DIR, AgentRunError, ToolObserver, build_llm_client, run_agent, utf8_console
+from .agent import STATE_DIR, AgentRunError, ToolObserver, build_llm_client, run_agent, utf8_console
 from .lab import DockerLab, Lab, Scenario, get_scenario, load_scenarios
 
 
@@ -48,7 +48,7 @@ class EvalRow:
 
 
 async def evaluate_scenario(
-    scenario: Scenario, client: Client, lab: Lab, audit_dir: Path = AUDIT_DIR, on_tool: ToolObserver | None = None
+    scenario: Scenario, client: Client, lab: Lab, audit_dir: Path | None = None, on_tool: ToolObserver | None = None
 ) -> EvalRow:
     """Lo usa anche la UI (pulsante "Fallo risolvere all'AI"): la stessa prova, in diretta.
     Avvio e check di Docker vanno in un thread, così il server web non si ferma ad aspettarli."""

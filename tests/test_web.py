@@ -247,7 +247,7 @@ class TutorApiTest(unittest.TestCase):
         self.model = FakeModel("Guarda i permessi di ogni directory del percorso con namei -l.")
         for patch in (
             mock.patch("breakfix.tutor.STATE_PATH", Path(tmp.name) / "tutor.json"),
-            mock.patch("breakfix.tutor.AUDIT_DIR", Path(tmp.name) / "audit"),
+            mock.patch.dict("os.environ", {"BREAKFIX_AUDIT_DIR": str(Path(tmp.name) / "audit")}),
             mock.patch("breakfix.tutor.recent_commands", return_value="ls -l /srv/app/run.sh"),
             mock.patch.object(web, "build_llm_client", side_effect=lambda: self.model),
             mock.patch("breakfix.sandbox.container_id", return_value="sandbox-1"),

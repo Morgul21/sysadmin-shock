@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import sandbox
-from .sandbox import CheckResult, DockerSandbox, ExecResult
+from .sandbox import CheckResult, DockerSandbox
 
 
 LESSONS_DIR = Path(__file__).resolve().parents[2] / "lessons"
@@ -138,17 +138,14 @@ class LessonLab:
         sandbox.reset(LABEL_PREFIX + exercise.key)
         result = self.box.run_script(exercise.script("setup"))
         if result.exit_code != 0:
-            raise RuntimeError(f"{exercise.key}: la preparazione è fallita: {_output(result)}")
+            raise RuntimeError(f"{exercise.key}: la preparazione è fallita: {result.output}")
 
     def check(self, exercise: Exercise, answer: str | None = None) -> CheckResult:
-        if not sandbox.is_running():
-            return CheckResult(False, "FAIL: il container non è più in esecuzione")
         if exercise.kind == "risposta":
             answer = " ".join((answer or "").split())[:MAX_ANSWER_CHARS]
         else:
             answer = None
-        result = self.box.run_script(exercise.script("check", answer))
-        return CheckResult(result.exit_code == 0, _output(result))
+        return sandbox.run_check(self.box, exercise.script("check", answer))
 
     def validate(self, exercise: Exercise) -> list[str]:
         """Valido se, a ogni giro: appena preparato non passa, con la soluzione di riferimento sì."""
@@ -162,14 +159,10 @@ class LessonLab:
                 problems.append(f"prima della soluzione il check passa: {before.output}")
             solution = self.box.run_script(exercise.script("solution"))
             if solution.exit_code != 0:
-                return [*problems, f"la soluzione di riferimento è fallita: {_output(solution)}"]
+                return [*problems, f"la soluzione di riferimento è fallita: {solution.output}"]
             answer = solution.stdout.strip() if exercise.kind == "risposta" else None
             if not (after := self.check(exercise, answer)).passed:
                 problems.append(f"con la soluzione di riferimento il check fallisce: {after.output}")
             if problems:
                 return problems
         return []
-
-
-def _output(result: ExecResult) -> str:
-    return (result.stdout + result.stderr).strip()
