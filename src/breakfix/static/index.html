@@ -80,9 +80,12 @@
       <p id="man" class="muted small" hidden></p>
 
       <details id="tutor" class="card" hidden>
-        <summary>Chiedi al tutor</summary>
-        <p class="muted small">Ti aiuta a ragionare, non ti dà la soluzione: vede i comandi che hai lanciato nel
-          terminale e quanti indizi hai aperto. Con il modello locale una risposta può richiedere mezzo minuto.</p>
+        <summary>Chiedi al tutor AI</summary>
+        <p class="muted small">Il tutor è un modello di intelligenza artificiale, non una persona: può sbagliare.
+          Ti aiuta a ragionare, non ti dà la soluzione: vede i comandi che hai lanciato nel terminale e quanti
+          indizi hai aperto. La domanda e quei comandi vengono mandati al modello e salvati nel registro sul PC.
+          Se hai risolto o no lo decide il pulsante Verifica, non il tutor. Con il modello locale una risposta
+          può richiedere mezzo minuto.</p>
         <div id="tutor-log" class="tutor-log" aria-live="polite"></div>
         <form id="tutor-form" class="tutor-form">
           <textarea id="tutor-question" rows="2" maxlength="1000" required

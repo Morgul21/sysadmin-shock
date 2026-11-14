@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import unittest
 from unittest import mock
@@ -10,7 +11,7 @@ from mcp.client.stdio import get_default_environment, stdio_client
 from mcp.shared.memory import create_connected_server_and_client_session
 
 from breakfix.guardrail import BLOCKED_PREFIX
-from breakfix.sandbox import MockSandbox
+from breakfix.sandbox import DockerSandbox, MockSandbox
 from breakfix.server import build_server
 
 
@@ -40,6 +41,26 @@ class ServerContractTest(unittest.IsolatedAsyncioTestCase):
         async with create_connected_server_and_client_session(build_server(MockSandbox())) as session:
             result = await session.call_tool("exec_in_sandbox", {"command": ""})
         self.assertTrue(result.isError)
+
+    async def test_a_command_that_hangs_comes_back_as_a_result(self) -> None:
+        # Il tool critico si blocca (es. `tail -f`): dopo il timeout l'agente riceve un esito che può
+        # leggere (124, come `timeout` di coreutils), non un'eccezione e non un'attesa senza fine.
+        hang = subprocess.TimeoutExpired(cmd="docker exec", timeout=1)
+        with mock.patch("breakfix.sandbox.subprocess.run", side_effect=hang) as run:
+            async with create_connected_server_and_client_session(build_server(DockerSandbox(timeout=1))) as session:
+                result = await session.call_tool("exec_in_sandbox", {"command": "tail -f /var/log/app/app.log"})
+        self.assertEqual(run.call_args.kwargs["timeout"], 1)
+        self.assertFalse(result.isError)
+        self.assertEqual(result.structuredContent["exit_code"], 124)
+        self.assertIn("timeout: comando interrotto dopo 1s", result.structuredContent["stderr"])
+
+    async def test_a_sandbox_that_is_down_is_a_tool_error(self) -> None:
+        # Docker non c'è: l'agente riceve un errore del tool con il motivo, e può dirlo a chi l'ha lanciato.
+        with mock.patch("breakfix.sandbox.subprocess.run", side_effect=FileNotFoundError("docker")):
+            async with create_connected_server_and_client_session(build_server(DockerSandbox())) as session:
+                result = await session.call_tool("exec_in_sandbox", {"command": "id"})
+        self.assertTrue(result.isError)
+        self.assertIn("docker", result.content[0].text)
 
 
 class DatapizzaMCPClientTest(unittest.IsolatedAsyncioTestCase):

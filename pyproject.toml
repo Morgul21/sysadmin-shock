@@ -35,6 +35,7 @@ breakfix-tutor = "breakfix.tutor:main"
 breakfix-tutor-eval = "breakfix.tutor_eval:main"
 breakfix-sandbox = "breakfix.lab:main"
 breakfix-eval = "breakfix.evaluate:main"
+breakfix-author = "breakfix.author:main"
 breakfix-ui = "breakfix.web:main"
 
 [tool.setuptools.packages.find]

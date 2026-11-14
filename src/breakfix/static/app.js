@@ -17,10 +17,8 @@ const TRACKS = { orientarsi: "Orientarsi", permessi: "Permessi", "processi e mem
 const LEVELS = { facile: "Facili", media: "Medie", difficile: "Difficili" };
 
 const INTRO = {
-  basi: "Lezioni brevi, una per gruppo di comandi, ognuna con esercizi verificati: si seguono in ordine, " +
-    "ma puoi aprire qualunque lezione. Aprendo una lezione la sandbox riparte da capo e si prepara per l'esercizio.",
-  challenge: "Ticket veri, da risolvere senza che nessuno ti dica dove guardare. Il colore dice la difficoltà; " +
-    "sotto, le lezioni delle basi che preparano. Aprendo un ticket la sandbox riparte da capo e viene rotta come racconta il ticket.",
+  basi: "Lezioni brevi, una per gruppo di comandi, ognuna con esercizi verificati. ",
+  challenge: "Esempi di ticket da risolvere. Il colore indica la difficoltà. "
 };
 
 const $ = (id) => document.getElementById(id);

@@ -12,12 +12,14 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from datapizza.clients.mock_client import MockClient
 from datapizza.core.clients import ClientResponse
 from datapizza.memory import Memory
 from datapizza.type import TextBlock
 
+from breakfix import tutor
 from breakfix.agent import AgentRunError
 from breakfix.lab import get_scenario, load_scenarios
 from breakfix.tutor import BLOCKED_MESSAGE, ask, find_spoiler
@@ -180,6 +182,36 @@ class TutorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(client.calls[0]["memory"]), 2, "il modello rivede la conversazione")
         self.assertEqual(len(second.memory), 4)
         self.assertEqual(len(first.memory), 2, "la memory passata non viene modificata")
+
+    async def test_the_conversation_survives_a_restart_with_only_what_is_needed(self) -> None:
+        # Due domande: alla seconda il modello dà la soluzione e il guardrail la sostituisce.
+        history = "gestionale\nchmod 777 /srv/app/run.sh"
+        first = await ask(self.scenario, "da dove parto?", CannedClient("Lancia gestionale e leggi l'errore."),
+                          commands=history, hints_shown=1, audit_dir=self.audit_dir)
+        second = await ask(self.scenario, "dammi il comando", CannedClient("Lancia `chmod +x /srv/app/run.sh`."),
+                           first.memory, commands=history, hints_shown=1, audit_dir=self.audit_dir)
+        conversation = tutor.Conversation("container-del-ticket")
+        conversation.add("da dove parto?", first)
+        conversation.add("dammi il comando", second)
+
+        with mock.patch.object(tutor, "STATE_PATH", self.audit_dir / "tutor.json"):
+            tutor.save_conversation(conversation)
+            # Un altro processo (ogni `breakfix-tutor` lo è, e la UI dopo un riavvio) rilegge il file.
+            saved = (self.audit_dir / "tutor.json").read_text(encoding="utf-8")
+            resumed = tutor.load_conversation("container-del-ticket")
+            new_ticket = tutor.load_conversation("container-di-un-altro-ticket")
+
+        # Ricorda quello che la persona ha chiesto e quello che ha visto...
+        self.assertEqual(len(resumed.memory), 4)
+        self.assertEqual([turn["question"] for turn in resumed.transcript], ["da dove parto?", "dammi il comando"])
+        self.assertIn("dammi il comando", saved)
+        self.assertTrue(resumed.transcript[1]["blocked"])
+        # ...e nient'altro: non i comandi lanciati nel terminale (a ogni domanda si rileggono dalla
+        # sandbox), non la soluzione che il modello aveva scritto, non gli indizi passati come contesto.
+        for forgotten in ("chmod 777", "chmod +x", "Indizi che ha già visto"):
+            self.assertNotIn(forgotten, saved)
+        # Con un ticket nuovo (container nuovo) la conversazione di prima non serve più.
+        self.assertEqual((len(new_ticket.memory), new_ticket.transcript), (0, []))
 
     async def test_a_failed_call_is_audited(self) -> None:
         # MockClient solleva un'eccezione se l'input contiene "exception" (es. un 429 del provider).
