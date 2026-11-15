@@ -33,7 +33,8 @@ SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "scenarios"
 APP_DIR = sandbox.SANDBOX_DIR / "app"
 # app.conf no: alcuni fix lo modificano legittimamente (es. CACHE_MB in cache-too-big).
 APP_CODE = ("run.sh", "cache.py")
-CATEGORIES = ("permessi", "memoria")
+# disco: per ora solo negli esercizi del Laboratorio, generati dalla guida (guide_author.py).
+CATEGORIES = ("permessi", "memoria", "disco")
 DIFFICULTIES = ("facile", "media", "difficile")
 # Il programma di cui parlano i ticket e l'utente con cui gira: il contesto che l'helpdesk
 # aggiunge a ogni ticket. Dove sta e come è fatto lo si scopre sul server.

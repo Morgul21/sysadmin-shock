@@ -19,7 +19,9 @@ class ScenarioSetTest(unittest.TestCase):
 
     def test_size_and_categories(self) -> None:
         self.assertTrue(5 <= len(self.scenarios) <= 8, len(self.scenarios))
-        self.assertEqual({s.category for s in self.scenarios}, set(CATEGORIES))
+        # Ogni scenario scritto a mano ha una categoria nota, e permessi e memoria ne hanno almeno uno.
+        # disco no: per ora i suoi esercizi li genera il Laboratorio dalla guida.
+        self.assertEqual({s.category for s in self.scenarios}, set(CATEGORIES) - {"disco"})
 
     def test_every_scenario_is_complete(self) -> None:
         for s in self.scenarios:

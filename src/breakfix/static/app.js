@@ -1,7 +1,8 @@
-// La pagina: le mappe delle basi e delle challenge (box collegate), e la pagina di lavoro con il
-// terminale. Gli indirizzi stanno nel frammento: #/basi, #/basi/5/2 (lezione 5, esercizio 2),
-// #/challenge, #/challenge/3. Ricaricando si resta dove si era, e la sandbox riparte solo se
-// l'esercizio o il ticket chiesto non è già quello attivo.
+// La pagina: le mappe delle basi e delle challenge (box collegate), il Laboratorio e la pagina di lavoro
+// con il terminale. Gli indirizzi stanno nel frammento: #/basi, #/basi/5/2 (lezione 5, esercizio 2),
+// #/challenge, #/challenge/3, #/laboratorio, #/laboratorio/<chiave> (un esercizio generato).
+// Ricaricando si resta dove si era, e la sandbox riparte solo se l'esercizio o il ticket chiesto non è
+// già quello attivo.
 
 // Il metodo di un sistemista, uguale per tutti i ticket: non dice la causa, dice da dove partire.
 const FIRST_STEPS = [
@@ -24,7 +25,7 @@ const INTRO = {
 const $ = (id) => document.getElementById(id);
 let lessons = [];
 let tickets = [];
-let current = null; // quello che è attivo nella sandbox: un ticket o un esercizio
+let current = null; // quello che è attivo nella sandbox: un ticket, un esercizio o un esercizio generato
 let hintsShown = 0;
 let socket = null;
 let busy = false;
@@ -50,9 +51,9 @@ const PROGRESS_KEY = "breakfix.progress";
 function loadProgress() {
   try {
     const saved = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {};
-    return { exercises: saved.exercises || [], tickets: saved.tickets || [] };
+    return { exercises: saved.exercises || [], tickets: saved.tickets || [], generated: saved.generated || [] };
   } catch {
-    return { exercises: [], tickets: [] };
+    return { exercises: [], tickets: [], generated: [] };
   }
 }
 
@@ -126,7 +127,7 @@ function markdown(text) {
 }
 
 function showError(message) {
-  for (const id of ["error", "map-error"]) {
+  for (const id of ["error", "map-error", "lab-error"]) {
     $(id).textContent = message;
     $(id).hidden = !message;
   }
@@ -172,6 +173,7 @@ function section(title, boxes, className = "") {
 
 function showMap(kind) {
   $("work-page").hidden = true;
+  $("lab-page").hidden = true;
   $("map-page").hidden = false;
   $("map-intro").textContent = INTRO[kind];
   $("map").innerHTML = kind === "basi"
@@ -185,6 +187,7 @@ function showMap(kind) {
 
 function showWork() {
   $("map-page").hidden = true;
+  $("lab-page").hidden = true;
   $("work-page").hidden = false;
   requestAnimationFrame(() => fit.fit()); // il terminale era nascosto: va ridimensionato ora
 }
@@ -231,9 +234,20 @@ async function openTicket(number) {
   await start(`/api/start/${number}`);
 }
 
+async function openGenerated(key) {
+  setBack("laboratorio");
+  if (current?.kind === "generato" && current.key === key) {
+    render(current);
+    return;
+  }
+  await start(`/api/lab/${encodeURIComponent(key)}/start`);
+}
+
+const BACK = { basi: "← Basi", challenge: "← Challenge", laboratorio: "← Laboratorio" };
+
 function setBack(kind) {
   $("back").href = `#/${kind}`;
-  $("back").textContent = kind === "basi" ? "← Basi" : "← Challenge";
+  $("back").textContent = BACK[kind];
 }
 
 function render(view) {
@@ -242,13 +256,17 @@ function render(view) {
   $("verdict").hidden = true;
   $("next").hidden = true;
   $("next-ticket").hidden = true;
+  // Un esercizio generato si presenta come un ticket, ma senza tutor né fixer: non ha le regole
+  // anti-spoiler che il tutor richiede, e nessuna esecuzione salvata con cui confrontarsi.
   const isTicket = view.kind === "ticket";
-  $("exercise-view").hidden = isTicket;
-  $("ticket-view").hidden = !isTicket;
-  if (isTicket) renderTicket(view);
-  else renderExercise(view);
+  const isExercise = view.kind === "esercizio";
+  $("exercise-view").hidden = !isExercise;
+  $("ticket-view").hidden = isExercise;
+  if (isExercise) renderExercise(view);
+  else renderTicket(view);
   renderHints();
   $("tutor").hidden = !isTicket;
+  $("tutor").before($("llm")); // nel Laboratorio il riquadro sta nella sua pagina: torna qui
   $("llm").hidden = !isTicket;
   if (isTicket) {
     loadTutor();
@@ -259,9 +277,10 @@ function render(view) {
   showFixer();
   $("work").hidden = false;
   // L'indirizzo segue quello che è attivo (es. il primo esercizio scelto in automatico).
-  const hash = isTicket ? `#/challenge/${view.number}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
+  const hash = isTicket ? `#/challenge/${view.number}`
+    : isExercise ? `#/basi/${view.lesson.number}/${view.key.split(".")[1]}` : `#/laboratorio/${view.key}`;
   if (location.hash !== hash) history.replaceState(null, "", hash);
-  setTab(isTicket ? "challenge" : "basi");
+  setTab(isTicket ? "challenge" : isExercise ? "basi" : "laboratorio");
   showWork();
 }
 
@@ -295,7 +314,7 @@ function renderStepper(lesson, activeKey) {
 
 function renderTicket(view) {
   const t = view.ticket;
-  $("ticket-number").textContent = `Ticket n. ${view.number}`;
+  $("ticket-number").textContent = view.kind === "generato" ? "Esercizio generato" : `Ticket n. ${view.number}`;
   $("ticket-meta").innerHTML = `<span class="badge ${view.difficulty}">${view.difficulty}</span> ` +
     `<span class="muted">${escape(view.category)}</span>`;
   $("ticket-sender").textContent = t.sender;
@@ -304,6 +323,10 @@ function renderTicket(view) {
   $("ticket-helpdesk").innerHTML =
     `[Helpdesk] Programma: ${escape(t.program)} (si avvia con il comando <code>${escape(t.program)}</code>)<br>` +
     `[Helpdesk] Utente con cui gira: ${escape(t.user)}`;
+  $("ticket-source").hidden = !view.source;
+  $("ticket-source").textContent = view.source
+    ? `Generato dall'AI dalla ${view.source.guide} (${view.source.license}) su richiesta: «${view.source.request}». ` +
+      "La sandbox l'ha validato; una persona non l'ha ancora rivisto." : "";
   $("ticket-lessons").hidden = !view.lessons.length;
   $("ticket-lessons").innerHTML = "Per prepararti, nelle basi: " + view.lessons
     .map((l) => `<a href="#/basi/${l.number}">lezione ${l.number}, ${escape(l.title)}</a>`).join(" · ");
@@ -311,7 +334,7 @@ function renderTicket(view) {
 
 function renderHints() {
   const hints = current.hints;
-  const man = current.kind === "ticket" ? current.man : current.lesson.man;
+  const man = current.kind === "esercizio" ? current.lesson.man : current.man;
   $("hints").innerHTML = hints.slice(0, hintsShown)
     .map((hint, i) => `<p class="hint"><b>Indizio ${i + 1}/${hints.length}.</b> ${withCode(hint)}</p>`)
     .join("");
@@ -319,7 +342,7 @@ function renderHints() {
   $("next-hint").hidden = done;
   $("next-hint").textContent = `Mostra indizio ${hintsShown + 1}/${hints.length}`;
   $("man").hidden = !done;
-  $("man").textContent = `Man page utili: ${man.join(", ")}`;
+  $("man").textContent = `${current.kind === "generato" ? "Fonte" : "Man page utili"}: ${man.join(", ")}`;
 }
 
 // --- Tutor: solo nei ticket. La conversazione la tiene il server, per sandbox: con un ticket nuovo riparte.
@@ -584,6 +607,10 @@ function showLink(id, text, href) {
 
 // Dopo un esercizio riuscito: il successivo, o a fine lezione la lezione dopo e il ticket collegato.
 function offerNext() {
+  if (current.kind === "generato") {
+    showLink("next", "Torna al Laboratorio →", "#/laboratorio");
+    return;
+  }
   if (current.kind === "ticket") {
     const next = tickets.find((t) => t.number === current.number + 1);
     if (next) showLink("next", `Ticket successivo (${next.number}) →`, `#/challenge/${next.number}`);
@@ -615,6 +642,8 @@ async function check() {
       if (isExercise) {
         markDone("exercises", current.key);
         renderStepper(lessons.find((l) => l.number === current.lesson.number), current.key);
+      } else if (current.kind === "generato") {
+        markDone("generated", current.key);
       } else {
         markDone("tickets", current.number);
         // Ticket risolto: ora si può vedere come l'ha fatto l'AI, con il conto dei tuoi comandi aggiornato.
@@ -626,6 +655,155 @@ async function check() {
     showError(error.message);
   } finally {
     $("check").disabled = false;
+  }
+}
+
+// --- Laboratorio: un esercizio generato dalla guida su richiesta. La generazione gira sul server
+// (minuti, con il modello locale): la pagina ne segue ricerche e tentativi, come per il fixer.
+
+const LAB_POLL_MS = 2000;
+let labTimer = null;
+let generationRunning = false;
+
+function showLab() {
+  $("map-page").hidden = true;
+  $("work-page").hidden = true;
+  $("lab-page").hidden = false;
+  $("lab-llm-slot").append($("llm")); // lo stesso riquadro dei ticket: il Laboratorio usa lo stesso modello
+  $("llm").hidden = false;
+  loadLlm();
+  loadLab();
+  loadGeneration();
+}
+
+function generatedBox(view) {
+  const done = isDone("generated", view.key);
+  const source = view.source?.section
+    ? `<span class="box-source">${escape(view.source.guide)} §${escape(view.source.section)}</span>` : "";
+  return `<div class="node">
+    <a class="box ticket ${view.difficulty}" href="#/laboratorio/${attr(view.key)}">
+      <span class="box-number">Generato${done ? " · risolto" : ""}</span>
+      <span class="box-title">${escape(view.ticket.subject)}</span>
+      <span><span class="badge ${view.difficulty}">${view.difficulty}</span>
+        <span class="muted small">${escape(view.category)}</span></span>
+      ${source}
+    </a></div>`;
+}
+
+async function loadLab() {
+  try {
+    const lab = await api("/api/lab");
+    $("lab-guide").hidden = !lab.guide.missing;
+    $("lab-guide").textContent = lab.guide.missing || "";
+    $("lab-send").disabled = Boolean(lab.guide.missing) || generationRunning;
+    $("lab-empty").hidden = lab.exercises.length > 0;
+    $("lab-exercises").innerHTML = lab.exercises.map(generatedBox).join("");
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+function searchLine(search) {
+  const who = search.by === "codice" ? "Ricerca con la tua richiesta" : "L'AI ha cercato";
+  const found = search.results.length
+    ? search.results.map((r) => `§${escape(r.id)} ${escape(r.title)}`).join(" · ") : "nessun passaggio";
+  return `<p class="lab-search"><b>${who}:</b> <code>${escape(search.query)}</code><br>` +
+    `<span class="muted">${found}</span></p>`;
+}
+
+function attemptLine(attempt) {
+  const where = attempt.ok ? "valido, provato nella sandbox"
+    : attempt.tried_in_sandbox ? "scartato dalla sandbox" : "scartato prima della sandbox";
+  const source = attempt.source ? ` · fonte §${escape(attempt.source)}` : "";
+  return `<li><span class="step-tag ${attempt.ok ? "ok" : "error"}">${attempt.ok ? "OK" : "KO"}</span> ` +
+    `Tentativo ${attempt.number}: ${where}${source}</li>`;
+}
+
+// Problemi dei tentativi e riepilogo dell'AI dicono causa e riparazione: stanno in un riquadro chiuso.
+function attemptDetails(run) {
+  const attempts = run.attempts.map((a) => `<p class="small"><b>Tentativo ${a.number}</b></p>` +
+    (a.problems.length ? `<pre>${escape(a.problems.join("\n"))}</pre>`
+      : `<pre>Dopo la rottura chi si esercita vede: ${escape(a.symptom)}</pre>`)).join("");
+  const answer = run.answer ? `<p class="small"><b>Riepilogo dell'AI</b></p><pre>${escape(run.answer)}</pre>` : "";
+  const audit = run.audit ? `<p class="muted small">Registro completo: .breakfix/audit/${escape(run.audit)}</p>` : "";
+  return attempts + answer + audit;
+}
+
+const GENERATION_STATUS = {
+  running: (run) => run.attempts.length
+    ? `Tentativo ${run.attempts.length} di ${run.attempts_max} fatto, l'AI continua… (modello ${run.model})`
+    : `L'AI legge la guida e scrive il primo tentativo… (modello ${run.model})`,
+  done: () => "Esercizio pronto: la sandbox l'ha validato.",
+  failed: (run) => `Nessun esercizio: nessuno dei ${run.attempts.length} tentativi ha superato la sandbox. ` +
+    "Riprova, magari con un'altra richiesta.",
+  error: (run) => `L'AI non è arrivata in fondo: ${run.error}`,
+};
+
+function renderGeneration(run) {
+  generationRunning = run?.status === "running";
+  $("lab-send").disabled = generationRunning;
+  $("lab-send").textContent = generationRunning ? "L'AI sta lavorando…" : "Genera l'esercizio";
+  $("lab-run").hidden = !run;
+  if (!run) return;
+  $("lab-run-status").className = `lab-status ${run.status}`;
+  $("lab-run-status").textContent = GENERATION_STATUS[run.status](run);
+  $("lab-searches").innerHTML = `<p class="muted small">Richiesta: «${escape(run.request)}»</p>` +
+    run.searches.map(searchLine).join("");
+  $("lab-attempts").innerHTML = run.attempts.map(attemptLine).join("");
+  $("lab-details").hidden = !run.attempts.length && !run.answer;
+  $("lab-details-body").innerHTML = attemptDetails(run);
+  const exercise = run.exercise;
+  $("lab-result").hidden = !exercise;
+  $("lab-result").innerHTML = exercise
+    ? `<p class="verdict pass">Ticket: ${escape(exercise.ticket.subject)}</p>` +
+      `<a class="button" href="#/laboratorio/${attr(exercise.key)}">Risolvilo →</a>` : "";
+}
+
+function stopLabPolling() {
+  clearTimeout(labTimer);
+  labTimer = null;
+}
+
+function pollGeneration() {
+  stopLabPolling();
+  labTimer = setTimeout(async () => {
+    try {
+      const run = await api("/api/generate");
+      renderGeneration(run);
+      if (run?.status === "running") return pollGeneration();
+      labTimer = null;
+      current = null; // la sandbox è stata ricreata sana: non c'è più niente di attivo
+      if (!$("lab-page").hidden) loadLab();
+    } catch (error) {
+      showError(error.message);
+      pollGeneration();
+    }
+  }, LAB_POLL_MS);
+}
+
+async function loadGeneration() {
+  try {
+    const run = await api("/api/generate");
+    renderGeneration(run);
+    if (run?.status === "running" && !labTimer) pollGeneration();
+  } catch {
+    renderGeneration(null);
+  }
+}
+
+async function requestExercise(event) {
+  event.preventDefault();
+  const request = $("lab-request").value.trim();
+  if (!request) return;
+  showError("");
+  $("lab-send").disabled = true;
+  try {
+    renderGeneration(await api("/api/generate", "POST", { request }));
+    current = null;
+    pollGeneration();
+  } catch (error) {
+    showError(error.message);
+    $("lab-send").disabled = false;
   }
 }
 
@@ -688,9 +866,10 @@ function setTab(name) {
 
 function route() {
   const [part, number, step] = location.hash.replace(/^#\/?/, "").split("/");
-  const kind = part === "challenge" ? "challenge" : "basi";
+  const kind = ["challenge", "laboratorio"].includes(part) ? part : "basi";
   setTab(kind);
   showError("");
+  if (kind === "laboratorio") return number ? openGenerated(number) : showLab();
   if (!number) return showMap(kind);
   return kind === "basi" ? openLesson(Number(number), step) : openTicket(Number(number));
 }
@@ -707,6 +886,10 @@ $("next-hint").onclick = () => {
 };
 $("reconnect").onclick = connect;
 $("tutor-form").onsubmit = askTutor;
+$("lab-form").onsubmit = requestExercise;
+$("lab-request").onkeydown = (event) => {
+  if (event.key === "Enter" && !event.shiftKey) $("lab-form").requestSubmit();
+};
 $("fixer-start").onclick = startFixer;
 $("llm-form").onsubmit = chooseLlm;
 $("llm-provider").onchange = changeProvider;

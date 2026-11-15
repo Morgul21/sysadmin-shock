@@ -24,6 +24,10 @@ MAX_OUTPUT_CHARS = 4000
 # Etichetta del container con lo scenario attivo: il reset la azzera insieme al container.
 SCENARIO_LABEL = "breakfix.scenario"
 
+DATA_DIR = "/srv/app/data"
+DATA_SIZE = "16m"
+DATA_INODES = 1024
+
 # Limiti del container: niente rete, memoria e processi limitati, niente escalation.
 RUN_FLAGS = [
     "--network", "none",
@@ -34,6 +38,9 @@ RUN_FLAGS = [
     "--hostname", "sandbox",
     # /dev/shm più grande del default (64MB): lo scenario shm-full lo riempie.
     "--shm-size", "224m",
+    # I dati dell'app su una partizione a sé, piccola: un esercizio di disco pieno (o di inode finiti)
+    # riempie 16 MB, non il disco del PC. uid/gid 1000 = l'utente app dell'immagine; 750 come nel Dockerfile.
+    "--tmpfs", f"{DATA_DIR}:rw,noexec,nosuid,size={DATA_SIZE},nr_inodes={DATA_INODES},uid=1000,gid=1000,mode=0750",
 ]
 
 

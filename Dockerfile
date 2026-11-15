@@ -6,6 +6,10 @@ FROM python:3.12-slim-bookworm
 # Solo la CLI di Docker: sandbox.py e lab.py lanciano `docker build/run/exec`.
 COPY --from=docker:27.5.1-cli /usr/local/bin/docker /usr/local/bin/docker
 
+# La guida da cui il Laboratorio genera gli esercizi: la Debian Reference (GPL-2+), in italiano, della
+# stessa versione Debian della sandbox (bookworm). Prima dei test: c'è anche l'eval della ricerca.
+RUN apt-get update     && apt-get install -y --no-install-recommends debian-reference-it     && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY . .
 # Editable: scenari, lezioni, sandbox/ e .breakfix/ si trovano a partire dal codice (parents[2]).

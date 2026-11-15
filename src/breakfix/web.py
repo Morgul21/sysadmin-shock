@@ -9,6 +9,10 @@ Fa quello che fa la CLI `breakfix-sandbox` (list, start, lessons, learn, shell, 
 Come nella shell della CLI, chi si esercita è root e i comandi non passano dal guardrail:
 il guardrail protegge dagli agenti, non da chi si esercita. Il verdetto lo dà sempre check.sh.
 
+Il Laboratorio genera un esercizio nuovo da una richiesta in chat ("simulami il disco pieno"): l'author
+cerca nella Debian Reference, scrive lo scenario e lo prova nella sandbox (guide_author.py). Diventa un
+esercizio solo se la sandbox lo valida; poi si risolve come un ticket, con terminale e Verifica.
+
 Dopo aver risolto un ticket, "Confronta con l'AI" mostra come l'ha affrontato il fixer: l'ultima prova
 salvata da `breakfix-eval`, senza toccare la sandbox. Da lì si può anche rilanciare il fixer dal vivo
 (sandbox rotta da capo -> fixer -> check.sh), e la pagina ne segue i comandi mentre lavora.
@@ -26,12 +30,14 @@ import argparse
 import ast
 import asyncio
 import contextlib
+import hashlib
 import importlib.util
 import json
 import os
 import re
 import secrets
 import subprocess
+import tomllib
 import threading
 import webbrowser
 from dataclasses import asdict, dataclass, field
@@ -50,11 +56,12 @@ from starlette.datastructures import Headers
 
 from pydantic import BaseModel, Field
 
-from breakfix import lessons, sandbox, tutor
+from breakfix import author, guide_author, lessons, sandbox, tutor
 from breakfix.agent import (API_KEY_VARS, DEFAULT_MODELS, OLLAMA_BASE_URL, AgentRunError, build_llm_client,
                             default_audit_dir, utf8_console)
 from breakfix.evaluate import EVAL_DIR, evaluate_scenario, write_report
 from breakfix.guardrail import BLOCKED_PREFIX
+from breakfix.guide import SOURCE_LICENSE, SOURCE_NAME, GuideMissing, load_index
 from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
 from breakfix.lessons import Exercise, LessonLab
 from breakfix.sandbox import DockerSandbox
@@ -157,9 +164,53 @@ def exercise_view(exercise: Exercise) -> dict[str, Any]:
     }
 
 
+def draft_key(draft: Scenario) -> str:
+    """L'indirizzo di un esercizio del Laboratorio: l'id della bozza direbbe la causa (es. data-disk-full)."""
+    return hashlib.sha256(draft.id.encode("utf-8")).hexdigest()[:10]
+
+
+def draft_source(draft: Scenario) -> dict[str, str]:
+    """La tabella [fonte] della bozza: il passaggio della guida da cui nasce (vuota per quelle dal manuale)."""
+    try:
+        meta = tomllib.loads((draft.path / "scenario.toml").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: str(v) for k, v in meta.get("fonte", {}).items()}
+
+
+def draft_view(draft: Scenario) -> dict[str, Any]:
+    """Un esercizio del Laboratorio: come un ticket, più la fonte. Il testo del passaggio è nell'ultimo indizio."""
+    source = draft_source(draft)
+    ticket = draft.ticket
+    return {
+        "kind": "generato",
+        "key": draft_key(draft),
+        "category": draft.category,
+        "difficulty": draft.difficulty,
+        "ticket": {"sender": ticket.sender, "subject": ticket.subject, "body": ticket.body.strip(),
+                   "program": ticket.program, "user": ticket.user},
+        "hints": list(draft.hints),
+        "man": list(draft.man),
+        "lessons": [],
+        "source": {"guide": source.get("guida"), "license": source.get("licenza"),
+                   "section": source.get("sezione"), "request": source.get("richiesta")} if source else None,
+    }
+
+
+def _find_draft(key: str) -> Scenario:
+    for draft in author.load_drafts():
+        if draft_key(draft) == key:
+            return draft
+    raise KeyError(f"esercizio sconosciuto: {key}")
+
+
 class CheckRequest(BaseModel):
     # Solo per gli esercizi di tipo risposta; i ticket e gli esercizi di stato non la usano.
     answer: str | None = Field(default=None, max_length=lessons.MAX_ANSWER_CHARS)
+
+
+class GenerateRequest(BaseModel):
+    request: str = Field(min_length=1, max_length=guide_author.MAX_REQUEST_CHARS)
 
 
 class TutorRequest(BaseModel):
@@ -234,6 +285,63 @@ def _fixer_running() -> bool:
 def require_no_fixer() -> None:
     if _fixer_running():
         raise HTTPException(409, "l'AI sta lavorando sulla sandbox: aspetta che finisca")
+    if _generation_running():
+        raise HTTPException(409, "il Laboratorio sta provando un esercizio nella sandbox: aspetta che finisca")
+
+
+@dataclass
+class GenerationRun:
+    """Un'esecuzione del Laboratorio. Tentativi e ricerche si leggono dal banco dell'author mentre lavora."""
+
+    request: str
+    model: str
+    status: str = "running"  # running, done (c'è un esercizio), failed (nessuno valido), error
+    bench: Any = None
+    draft: Scenario | None = None
+    answer: str | None = None
+    error: str | None = None
+    audit: str | None = None
+    task: asyncio.Task | None = None
+
+    def view(self) -> dict[str, Any]:
+        bench = self.bench
+        attempts = [{"number": n, "ok": not a["problems"], "tried_in_sandbox": a["tried_in_sandbox"],
+                     "source": a.get("source"), "problems": a["problems"], "symptom": a.get("symptom", "")}
+                    for n, a in enumerate(bench.attempts if bench else [], start=1)]
+        return {
+            "status": self.status, "request": self.request, "model": self.model, "error": self.error,
+            "searches": list(bench.searches) if bench else [], "attempts": attempts,
+            "attempts_max": bench.max_attempts if bench else None, "audit": self.audit,
+            # Il riepilogo dell'author dice causa e riparazione: la pagina lo mostra solo su richiesta.
+            "answer": self.answer,
+            "exercise": draft_view(self.draft) if self.draft else None,
+        }
+
+
+_generation: GenerationRun | None = None
+
+
+def _generation_running() -> bool:
+    return _generation is not None and _generation.status == "running"
+
+
+async def _run_generation(run: GenerationRun, client: Any) -> None:
+    def keep(bench: Any) -> None:
+        run.bench = bench
+
+    try:
+        generation = await guide_author.generate(run.request, client, DockerLab(), on_bench=keep)
+    except AgentRunError as exc:
+        run.status, run.error, run.audit = "error", str(exc), exc.audit_path.name
+    except Exception as exc:  # es. Docker giù a metà
+        run.status, run.error = "error", f"{type(exc).__name__}: {exc}"
+    else:
+        run.draft, run.answer, run.audit = generation.draft, generation.answer, generation.audit_path.name
+        run.status = "done" if generation.draft else "failed"
+    finally:
+        # L'ultimo tentativo lascia la sandbox rotta: si riparte da una sana, senza esercizio attivo.
+        with contextlib.suppress(*DOCKER_ERRORS):
+            await asyncio.to_thread(sandbox.reset)
 
 
 async def _run_fixer(run: FixerRun, scenario: Scenario, client: Any) -> None:
@@ -339,6 +447,8 @@ def lesson_list() -> list[dict[str, Any]]:
 def active() -> dict[str, Any] | None:
     if exercise := lessons.active_exercise():
         return exercise_view(exercise)
+    if draft := author.active_draft():
+        return draft_view(draft)
     scenario = _active()
     return scenario_view(scenario) if scenario else None
 
@@ -373,10 +483,54 @@ def learn(key: str) -> dict[str, Any]:
     return exercise_view(_start_sandbox(lessons.get_exercise, key, LessonLab().start))
 
 
+@app.get("/api/lab")
+def lab_exercises() -> dict[str, Any]:
+    """Il Laboratorio: gli esercizi generati (dal più recente) e se la guida c'è."""
+    try:
+        load_index()
+        guide = {"name": SOURCE_NAME, "license": SOURCE_LICENSE, "missing": None}
+    except GuideMissing as exc:
+        guide = {"name": SOURCE_NAME, "license": SOURCE_LICENSE, "missing": str(exc)}
+    drafts = sorted(author.load_drafts(), key=lambda d: (d.path / "scenario.toml").stat().st_mtime, reverse=True)
+    return {"guide": guide, "exercises": [draft_view(d) for d in drafts]}
+
+
+@app.post("/api/lab/{key}/start", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
+def start_lab_exercise(key: str) -> dict[str, Any]:
+    return draft_view(_start_sandbox(_find_draft, key, author.start_draft))
+
+
+@app.get("/api/generate")
+def generation_status() -> dict[str, Any] | None:
+    return _generation.view() if _generation else None
+
+
+@app.post("/api/generate", status_code=202, dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
+async def start_generation(request: GenerateRequest) -> dict[str, Any]:
+    """Il Laboratorio in sottofondo: ricerca nella guida, author, validazione. Si segue con GET /api/generate.
+
+    Usa la sandbox (la rompe e la ripara a ogni tentativo): il ticket o l'esercizio aperto si perde."""
+    global _generation, _fixer
+    try:
+        text = guide_author.clean_request(request.request)
+        await asyncio.to_thread(load_index)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except GuideMissing as exc:
+        raise HTTPException(503, str(exc)) from exc
+    client = _llm_client("modello")
+    run = GenerationRun(request=text, model=client.model_name)
+    run.task = asyncio.create_task(_run_generation(run, client))  # il riferimento la tiene viva
+    _generation, _fixer = run, None
+    return run.view()
+
+
 @app.post("/api/check", dependencies=[Depends(require_same_origin)])
 def check(request: CheckRequest | None = None) -> dict[str, Any]:
     if exercise := lessons.active_exercise():
         result = LessonLab().check(exercise, request.answer if request else None)
+    elif draft := author.active_draft():
+        result = DockerLab().check(draft)
     elif scenario := _active():
         result = DockerLab().check(scenario)
     else:

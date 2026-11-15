@@ -529,3 +529,122 @@ class LlmApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LabApiTest(unittest.TestCase):
+    """Il Laboratorio: guida finta, bozze in una cartella temporanea, author e sandbox sostituiti."""
+
+    def setUp(self) -> None:
+        from breakfix.author import Draft, write_draft
+        from test_guide import sample_index
+        from test_guide_author import DISK_FULL
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.drafts = Path(tmp.name) / "drafts"
+        self.index = sample_index()
+        self.started: list[str] = []
+        self.resets = 0
+        for patch in (
+            mock.patch.dict("os.environ", {"BREAKFIX_DRAFTS_DIR": str(self.drafts), "LLM_PROVIDER": "ollama",
+                                           "LLM_MODEL": "modello-di-prova"}),
+            mock.patch.object(web, "_generation", None),
+            mock.patch.object(web, "_fixer", None),
+            mock.patch.object(web, "_llm_choice", None),
+            mock.patch.object(web, "load_index", lambda: self.index),
+            mock.patch.object(web.author, "start_draft", lambda draft: self.started.append(draft.id)),
+            mock.patch("breakfix.sandbox.reset", side_effect=self._reset),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+        passage = self.index.by_id["9.6.1"]
+        self.draft_path = write_draft(
+            Draft.from_arguments(DISK_FULL), self.drafts, man="Debian Reference §9.6.1",
+            model="m", trace="t", hints=("uno", "due", passage.text),
+            source={"guida": "Debian Reference", "licenza": "GPL-2+, Osamu Aoki", "sezione": "9.6.1",
+                    "richiesta": "il disco è pieno", "testo": passage.text})
+        self.client = self.enterContext(TestClient(web.app))
+
+    def _reset(self, *args) -> None:
+        self.resets += 1
+
+    def _exercise(self) -> dict:
+        return self.client.get("/api/lab").json()["exercises"][0]
+
+    def test_generated_exercises_are_listed_without_revealing_the_cause(self) -> None:
+        lab = self.client.get("/api/lab").json()
+        self.assertIsNone(lab["guide"]["missing"])
+        self.assertEqual(len(lab["exercises"]), 1)
+        exercise = lab["exercises"][0]
+        self.assertEqual((exercise["kind"], exercise["category"], exercise["source"]["section"]),
+                         ("generato", "disco", "9.6.1"))
+        listing = self.client.get("/api/lab").text
+        for secret in ("data-disk-full", "Partizione dei dati piena", "backup.tmp"):
+            self.assertNotIn(secret, listing)
+
+    def test_an_exercise_starts_and_is_checked_like_a_ticket(self) -> None:
+        key = self._exercise()["key"]
+        response = self.client.post(f"/api/lab/{key}/start")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.started, ["data-disk-full"])
+        self.assertEqual(self.client.post("/api/lab/sconosciuto/start").status_code, 404)
+
+        with mock.patch("breakfix.sandbox.active_scenario", return_value="generata:data-disk-full"), \
+                mock.patch.object(web.DockerLab, "check", return_value=CheckResult(True, "PASS: il gestionale riparte")):
+            self.assertEqual(self.client.get("/api/active").json()["key"], key)
+            self.assertTrue(self.client.post("/api/check").json()["passed"])
+            # Né tutor né fixer: un esercizio generato non ha le regole anti-spoiler del tutor.
+            self.assertEqual(self.client.post("/api/tutor", json={"question": "aiuto"}).status_code, 409)
+            self.assertEqual(self.client.post("/api/fixer").status_code, 409)
+
+    def test_a_generation_is_followed_and_ends_with_a_healthy_sandbox(self) -> None:
+        import threading
+
+        from breakfix.author import Generation, get_draft
+
+        release = threading.Event()
+
+        async def fake_generate(request, client, lab, *, on_bench):
+            import asyncio
+            bench = mock.Mock(attempts=[], searches=[{"query": request, "by": "codice", "results": []}], max_attempts=4)
+            on_bench(bench)
+            bench.attempts.append({"tried_in_sandbox": True, "problems": ["dopo la rottura il check passa"],
+                                   "source": "9.6.1", "symptom": ""})
+            await asyncio.to_thread(release.wait, 5)
+            return Generation(draft=get_draft("data-disk-full", self.drafts), attempts=bench.attempts,
+                              answer="Causa: disco pieno.", audit_path=Path("audit-abc.json"))
+
+        with mock.patch.object(web.guide_author, "generate", fake_generate):
+            response = self.client.post("/api/generate", json={"request": "il disco è pieno"})
+            self.assertEqual(response.status_code, 202)
+            self.assertEqual(response.json()["model"], "modello-di-prova")
+            # Mentre il Laboratorio usa la sandbox non parte nient'altro.
+            for path in ("/api/start/1", "/api/learn/1.1", f"/api/lab/{self._exercise()['key']}/start", "/api/generate"):
+                with self.subTest(path):
+                    self.assertEqual(self.client.post(path, json={"request": "altro"}).status_code, 409)
+            running = self.client.get("/api/generate").json()
+            self.assertEqual((running["status"], len(running["attempts"])), ("running", 1))
+            self.assertFalse(running["attempts"][0]["ok"])
+            release.set()
+            for _ in range(100):
+                run = self.client.get("/api/generate").json()
+                if run["status"] != "running":
+                    break
+                time.sleep(0.05)
+
+        self.assertEqual(run["status"], "done")
+        self.assertEqual(run["exercise"]["key"], self._exercise()["key"])
+        self.assertEqual((run["audit"], self.resets), ("audit-abc.json", 1))
+        self.assertEqual(self.started, [])
+
+    def test_bad_requests_and_a_missing_guide(self) -> None:
+        from breakfix.guide import GuideMissing
+
+        for body in ({"request": ""}, {"request": "   "}, {"request": "x" * 301}):
+            with self.subTest(body):
+                self.assertEqual(self.client.post("/api/generate", json=body).status_code, 422)
+        self.assertEqual(self.client.post("/api/generate", json={"request": "disco"}, headers=FOREIGN).status_code, 403)
+        with mock.patch.object(web, "load_index", side_effect=GuideMissing("guida assente")):
+            self.assertEqual(self.client.post("/api/generate", json={"request": "disco pieno"}).status_code, 503)
+            self.assertEqual(self.client.get("/api/lab").json()["guide"]["missing"], "guida assente")
+        self.assertIsNone(self.client.get("/api/generate").json())

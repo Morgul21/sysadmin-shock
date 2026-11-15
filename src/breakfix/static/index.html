@@ -13,6 +13,7 @@
     <nav class="tabs">
       <a href="#/basi" data-tab="basi">Basi</a>
       <a href="#/challenge" data-tab="challenge">Challenge</a>
+      <a href="#/laboratorio" data-tab="laboratorio">Laboratorio</a>
     </nav>
   </header>
 
@@ -26,6 +27,51 @@
     <p id="map-intro" class="muted"></p>
     <p id="map-error" class="verdict fail" hidden></p>
     <div id="map"></div>
+  </main>
+
+  <!-- Il Laboratorio: un esercizio nuovo da una richiesta, generato dalla Debian Reference e provato nella sandbox -->
+  <main id="lab-page" hidden>
+    <section class="lab">
+      <h2>Laboratorio</h2>
+      <p class="muted">Chiedi il guasto che vuoi provare. L'AI cerca nella <b>Debian Reference</b> i passaggi che ne
+        parlano, scrive un ticket e un guasto a partire da uno di quelli e li prova nella sandbox. Diventa un
+        esercizio solo se la sandbox dice che il guasto rompe il gestionale e che la riparazione lo fa ripartire:
+        il verdetto è del controllo, non dell'AI. Poi lo risolvi come un ticket, e gli indizi sono la pagina
+        della guida da cui è nato.</p>
+      <p class="muted small">Si può simulare quello che succede su un server senza dischi veri: spazio o inode
+        finiti nella partizione dei dati, file e permessi, processi e memoria. Un disco fisico guasto no: lo
+        si chiede, e l'AI sceglie il guasto più vicino che si può riprodurre. L'esercizio non l'ha rivisto una
+        persona: può essere poco realistico.</p>
+      <p id="lab-guide" class="verdict fail" hidden></p>
+      <p id="lab-error" class="verdict fail" hidden></p>
+
+      <form id="lab-form" class="card lab-form">
+        <label for="lab-request">Cosa vuoi simulare?</label>
+        <div class="tutor-form">
+          <textarea id="lab-request" rows="2" maxlength="300" required
+            placeholder="Es. il disco dei dati è pieno e il gestionale non parte"></textarea>
+          <button id="lab-send" class="primary">Genera l'esercizio</button>
+        </div>
+        <p class="muted small">Ci vogliono alcuni minuti con il modello locale. Intanto la sandbox viene rotta e
+          riparata più volte: il ticket o l'esercizio aperto si perde.</p>
+      </form>
+      <div id="lab-llm-slot"></div>
+
+      <div id="lab-run" class="card" hidden>
+        <p id="lab-run-status" class="lab-status" aria-live="polite"></p>
+        <div id="lab-searches"></div>
+        <ol id="lab-attempts" class="lab-attempts"></ol>
+        <details id="lab-details" hidden>
+          <summary>Dettagli dei tentativi (svelano la soluzione)</summary>
+          <div id="lab-details-body"></div>
+        </details>
+        <div id="lab-result" hidden></div>
+      </div>
+
+      <h2 class="lab-list-title">Esercizi generati</h2>
+      <p id="lab-empty" class="muted small" hidden>Ancora nessuno: chiedine uno qui sopra.</p>
+      <div id="lab-exercises" class="lab-grid"></div>
+    </section>
   </main>
 
   <!-- La pagina di lavoro: un esercizio o un ticket, con il terminale accanto -->
@@ -64,6 +110,7 @@
           <p id="ticket-helpdesk" class="muted small"></p>
         </article>
         <p id="ticket-lessons" class="small" hidden></p>
+        <p id="ticket-source" class="muted small" hidden></p>
         <details class="card">
           <summary>Come orientarsi</summary>
           <p class="muted small">I primi passi di ogni ticket: un clic scrive il comando nel terminale e lo esegue.
@@ -81,7 +128,7 @@
 
       <details id="llm" class="card" hidden>
         <summary>Modello AI: <span id="llm-current"></span></summary>
-        <p class="muted small">Il modello del tutor e di "Rilancia l'AI". Qui scegli provider e modello, non la
+        <p class="muted small">Il modello del tutor, di "Rilancia l'AI" e del Laboratorio. Qui scegli provider e modello, non la
           API key: quella resta nel file .env e non passa dalla pagina. La scelta vale finché l'app è accesa,
           poi torna quella del .env; gli eval usano sempre il .env.</p>
         <form id="llm-form" class="llm-form">

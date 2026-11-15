@@ -84,6 +84,20 @@ solo compito da LLM, scrivere: quindi un agente con un tool, `prova_scenario`, c
 verdetto della sandbox finché lo scenario non è valido. Chi scrive non è chi giudica: il check delle
 bozze è quello comune (`baseline`), non lo scrive l'author. Vedi [Bozze generate](#bozze-generate).
 
+**Il Laboratorio è lo stesso author con un'altra fonte (RAG).** Nella UI si chiede un guasto in chat
+("simulami il disco dei dati pieno"); il codice cerca nella *Debian Reference* (BM25) i passaggi che ne
+parlano e li mette nel task; l'author può cercarne altri con un secondo tool, `cerca_nella_guida`, e
+deve citare nel campo `fonte` l'id di un passaggio che ha davvero ricevuto. Il modello decide le due
+cose aperte (con quali parole cercare, quale guasto simulare); ricerca, controllo della fonte e
+validazione nella sandbox sono codice. Gli indizi dell'esercizio non li scrive il modello: sono il
+passaggio citato, mostrato per gradi. Vedi [Laboratorio](#laboratorio-rag-sulla-debian-reference).
+
+```text
+  richiesta ─► ricerca BM25 ─► passaggi ─► Author agent ── cerca_nella_guida ──► altri passaggi
+                (codice)                       │
+                                               └── prova_scenario + fonte ──► fonte ricevuta? ──► validate
+```
+
 ```text
   manuale di un comando ─► Author agent ── prova_scenario ──► validate (sana, rotta, riparata)
                                ▲                                   │
@@ -169,6 +183,9 @@ un'esecuzione non influenza la successiva.
 | Test del tutor: regole anti-spoiler, blocco, audit, conversazione (senza API key) | [tests/test_tutor.py](tests/test_tutor.py) |
 | Agente author: bozze di scenario dal manuale di un comando (CLI `breakfix-author`) | [src/breakfix/author.py](src/breakfix/author.py) |
 | Test dell'author: solo le bozze validate vengono salvate, formato, audit (senza Docker né API key) | [tests/test_author.py](tests/test_author.py) |
+| Laboratorio: ricerca BM25 nella Debian Reference (RAG) | [src/breakfix/guide.py](src/breakfix/guide.py) |
+| Laboratorio: author con la guida, controllo della fonte, CLI `breakfix-guide` | [src/breakfix/guide_author.py](src/breakfix/guide_author.py) |
+| Test del Laboratorio: parsing, ricerca, recall@5 sulla guida vera, fonte citata, API (senza Docker né modello) | [tests/test_guide.py](tests/test_guide.py), [tests/test_guide_author.py](tests/test_guide_author.py), [tests/test_web.py](tests/test_web.py) |
 | Eval del tutor (spoiler + giudice LLM) e calibrazione del giudice | [src/breakfix/tutor_eval.py](src/breakfix/tutor_eval.py), [evals/judge-calibration.toml](evals/judge-calibration.toml) |
 | Test dell'eval del tutor: verdetto, gate, calibrazione (senza modello) | [tests/test_tutor_eval.py](tests/test_tutor_eval.py) |
 | Test contratto MCP + integrazione datapizza | [tests/test_server.py](tests/test_server.py) |
@@ -250,7 +267,10 @@ breakfix-author new chown              # parte da `chown --help` letto nella san
 breakfix-author list
 breakfix-author validate               # rivalida le bozze, senza modello
 breakfix-author start data-dir-root-owned   # per provarla: poi `breakfix-sandbox shell` e `breakfix-author check`
-# Solo da CLI: nella UI la generazione non c'è (vedi Bozze generate)
+
+# 9. Laboratorio: un esercizio da una richiesta, a partire dalla Debian Reference (anche dalla UI, scheda Laboratorio)
+breakfix-guide cerca "il disco è pieno" --text   # solo la ricerca: i passaggi che riceverebbe l'author
+breakfix-guide nuovo "simulami il disco dei dati pieno"
 
 breakfix-sandbox down
 ```
@@ -416,7 +436,8 @@ sandbox), quindi le serve un Docker. Le strade sono due:
 | `BREAKFIX_SANDBOX` | `docker` | `mock` per test/demo senza Docker |
 | `BREAKFIX_AUDIT_DIR` | `.breakfix/audit` | dove salvare l'audit trail |
 | `BREAKFIX_MAX_STEPS` | `20` | passi massimi del fixer (chiamate al modello) prima di fermarsi |
-| `BREAKFIX_DRAFTS_DIR` | `.breakfix/drafts` | dove `breakfix-author` salva le bozze di scenario |
+| `BREAKFIX_DRAFTS_DIR` | `.breakfix/drafts` | dove `breakfix-author` e il Laboratorio salvano le bozze di scenario |
+| `BREAKFIX_GUIDE` | il pacchetto `debian-reference-it`, poi `.breakfix/guida/` | il testo della Debian Reference (`debian-reference.it.txt.gz`) per il Laboratorio |
 | `BREAKFIX_UI_HOST` | `127.0.0.1` (`0.0.0.0` nel container) | indirizzo su cui ascolta la UI |
 | `JUDGE_PROVIDER` / `JUDGE_MODEL` | quelli del tutor | il giudice di `breakfix-tutor-eval`: meglio un modello più forte |
 
@@ -528,7 +549,8 @@ Un test verifica che ogni `fix.sh` passi il guardrail: altrimenti nessun agente 
 
 > **Esperimento, solo da CLI.** La generazione è stata provata anche nella UI e poi tolta: su 9
 > esecuzioni solo 2 hanno dato uno scenario davvero nuovo. I numeri e i motivi sono in fondo a questa
-> sezione; cosa serve per farla funzionare è nella [Roadmap](#roadmap).
+> sezione; cosa serve per farla funzionare è nella [Roadmap](#roadmap). Il
+> [Laboratorio](#laboratorio-rag-sulla-debian-reference) è il secondo tentativo, con una fonte diversa.
 
 `breakfix-author new <comando>` fa scrivere a un agente uno scenario nuovo, ispirato al manuale di un
 comando ([author.py](src/breakfix/author.py)). L'immagine della sandbox è slim e senza rete, quindi le
@@ -617,6 +639,55 @@ il file, non l'idea). Anche la qualità del ticket è misurata solo in parte: il
 file e i percorsi, non un ticket che dice "il log". La categoria è una delle due esistenti anche quando
 non calza: `app.conf` rinominato è finito tra i "permessi". Nove esecuzioni dicono poco su quanto spesso
 riesce: manca un eval dell'author. Sono i motivi per cui una bozza va letta da una persona.
+
+### Laboratorio (RAG sulla Debian Reference)
+
+> **Esperimento, sul branch `sys-rag`.** La catena è provata con un modello scriptato e la sandbox vera;
+> quante volte riesce con un modello vero non è ancora misurato.
+
+Nella scheda **Laboratorio** si scrive il guasto che si vuole provare. La pagina segue il lavoro dal vivo
+(ricerche, tentativi OK/KO) e, se la sandbox valida uno scenario, offre l'esercizio: si risolve come un
+ticket, con terminale e Verifica. Problemi dei tentativi e riepilogo dell'AI dicono la soluzione, quindi
+stanno in un riquadro chiuso. Tutor e "Confronta con l'AI" non ci sono: un esercizio generato non ha le
+regole anti-spoiler che il guardrail del tutor richiede.
+
+**Cosa cambia rispetto alle bozze dal `--help`.** Il motivo del fallimento era la fonte: un `--help` dice
+cosa fa un comando, non cosa si rompe. Qui:
+
+- **La fonte è una guida di amministrazione, non un comando.** La *Debian Reference* di Osamu Aoki: libera
+  (GPL-2+), in italiano, e un pacchetto Debian (`debian-reference-it`) della stessa versione della sandbox
+  (bookworm), quindi comandi e percorsi sono quelli del terminale. Il testo non è nel repository:
+  l'immagine dell'app installa il pacchetto ([Dockerfile](Dockerfile)).
+- **Il guasto si chiede.** La richiesta in chat dice cosa cercare; prima l'author sceglieva da solo
+  dentro un mondo che gli 8 scenari avevano già esaurito.
+- **La sandbox ha un posto nuovo dove rompersi.** `/srv/app/data` è una partizione a sé (tmpfs da 16 MB e
+  1024 inode, [sandbox.py](src/breakfix/sandbox.py)): un esercizio di disco pieno riempie quella, non il
+  disco del PC. Gli 8 scenari e i 39 esercizi delle basi restano validi con la partizione nuova.
+  Nuova categoria `disco`, per ora solo negli esercizi generati.
+- **La fonte si controlla.** Lo scenario deve citare l'id di un passaggio che il modello ha ricevuto in
+  quella esecuzione (dalla prima ricerca o da `cerca_nella_guida`): un id inventato viene scartato prima
+  della sandbox. Il passaggio finisce nella tabella `[fonte]` della bozza e negli indizi.
+
+**Perché BM25 e non embedding.** La ricerca deve girare senza rete e senza un modello in più (il server
+vLLM non serve embedding) e dare sempre lo stesso risultato, così si testa. La guida ha 430 sezioni
+(815 passaggi da al più 1800 caratteri), indicizzate in meno di un secondo all'avvio. Il limite di una
+ricerca per parole sono i sinonimi che la guida non usa ("il disco si rompe" trova le immagini disco):
+per questo l'author ha il tool di ricerca e sceglie lui le parole.
+
+**Cosa è misurato.**
+
+| Cosa | Come | Esito |
+| --- | --- | --- |
+| La ricerca trova la sezione giusta | recall@5 su 6 richieste scritte come le scriverebbe chi si esercita ([test_guide.py](tests/test_guide.py)), gira nel build | 6/6. Le richieste le ho scritte dopo aver visto i risultati: è un controllo di regressione, non un eval cieco |
+| Una fonte non ricevuta non diventa un esercizio | test con modello scriptato ([test_guide_author.py](tests/test_guide_author.py)) | scartata prima della sandbox |
+| La catena intera | ricerca sulla guida vera, author scriptato, sandbox Docker vera: un primo tentativo (file da 4 MB) e un secondo (16 MB) | il primo scartato dalla sandbox (il gestionale riparte ancora), il secondo validato: `date: write error: No space left on device` |
+| Quante volte riesce con un modello vero | come per le bozze: N esecuzioni, scenari nuovi / validi / copie | **da fare** |
+
+**Limiti noti.** Il controllo sulla fonte dice che il passaggio è stato letto, non che il guasto ne
+segua: lo direbbe un giudice LLM, da calibrare come quello del tutor. Un disco fisico guasto non si
+simula (niente dischi veri né privilegi per montare): l'author sceglie il guasto più vicino e lo deve
+dire. La generazione occupa la sandbox per minuti: intanto ticket ed esercizi non partono. Come le bozze,
+un esercizio generato non l'ha rivisto una persona.
 
 ## Sicurezza
 
@@ -805,7 +876,8 @@ Dove il design è stato sfidato e cosa è cambiato dopo. Il coding agent usato �
 - [x] Tutor nella UI (riquadro "Chiedi al tutor") ed eval del tutor: spoiler (deterministico) + giudice LLM con rubrica, con tentativi di jailbreak; calibrazione del giudice su risposte giudicate a mano
 - [x] Author (`breakfix-author`): bozze di scenario dal manuale di un comando, validate dalla sandbox. Un agente con un tool al posto della DagPipeline Author→Breaker→Validator: rompere e validare non richiedono un modello
 - [x] Generazione provata anche nella UI (sezione "Generate dall'AI") e poi tolta: 2 scenari nuovi su 9 esecuzioni. Resta da CLI, con controlli sulle copie (stesso comando sullo stesso file, riparazione già esistente, ticket che nomina il file)
-- [ ] **Next step: challenge generate da guasti reali.** Serve (1) una fonte di problemi veri, per esempio un libro di troubleshooting o dei postmortem, da cui recuperare il caso con RAG al posto del `--help`; (2) una sandbox più ricca, con più servizi, altrimenti lo spazio dei guasti resta quello di oggi; (3) un giudice LLM per novità e qualità del ticket, che i controlli sui comandi non vedono; (4) un eval dell'author, con il tasso di riuscita su N esecuzioni, come per fixer e tutor. Solo dopo ha senso riportarla nella UI
+- [x] Laboratorio (branch `sys-rag`): esercizi da una richiesta in chat, con RAG (BM25) sulla Debian Reference, fonte citata e controllata, partizione dati da 16 MB per i guasti di disco. Manca l'eval con un modello vero
+- [ ] **Next step: challenge generate da guasti reali.** Serve (1) una fonte di problemi veri, per esempio un libro di troubleshooting o dei postmortem, da cui recuperare il caso con RAG al posto del `--help` (il Laboratorio fa il primo passo, con una guida di amministrazione); (2) una sandbox più ricca, con più servizi, altrimenti lo spazio dei guasti resta quello di oggi; (3) un giudice LLM per novità e qualità del ticket, che i controlli sui comandi non vedono; (4) un eval dell'author, con il tasso di riuscita su N esecuzioni, come per fixer e tutor. Solo dopo ha senso riportarla nella UI
 - [ ] Extra: indizi e regole anti-spoiler generati, eval in CI
 
 ## Note e difficoltà
