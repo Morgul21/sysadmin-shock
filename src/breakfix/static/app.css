@@ -315,6 +315,20 @@ code {
 }
 .tutor-form textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
 
+#llm { margin: 10px 0; }
+.llm-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
+.llm-form label { display: flex; flex-direction: column; gap: 4px; font: 13px var(--mono); color: var(--label); }
+.llm-form label:nth-child(2) { flex: 1; min-width: 160px; }
+.llm-form select, .llm-form input {
+  font: 14px var(--mono);
+  padding: 6px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border-light);
+  background: var(--code-bg);
+  color: var(--code-text);
+}
+.llm-form select:focus, .llm-form input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
 #fixer { margin: 10px 0; }
 #fixer-status { margin: 10px 0 0; color: var(--amber); font-family: var(--mono); }
 #fixer-saved { margin: 10px 0 0; font-family: var(--mono); }

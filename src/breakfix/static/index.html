@@ -79,6 +79,20 @@
       <button id="next-hint"></button>
       <p id="man" class="muted small" hidden></p>
 
+      <details id="llm" class="card" hidden>
+        <summary>Modello AI: <span id="llm-current"></span></summary>
+        <p class="muted small">Il modello del tutor e di "Rilancia l'AI". Qui scegli provider e modello, non la
+          API key: quella resta nel file .env e non passa dalla pagina. La scelta vale finché l'app è accesa,
+          poi torna quella del .env; gli eval usano sempre il .env.</p>
+        <form id="llm-form" class="llm-form">
+          <label>Provider <select id="llm-provider"></select></label>
+          <label>Modello <input id="llm-model" list="llm-models" autocomplete="off" spellcheck="false" maxlength="100"></label>
+          <datalist id="llm-models"></datalist>
+          <button id="llm-save">Usa questo modello</button>
+        </form>
+        <p id="llm-destination" class="small"></p>
+      </details>
+
       <details id="tutor" class="card" hidden>
         <summary>Chiedi al tutor AI</summary>
         <p class="muted small">Il tutor è un modello di intelligenza artificiale, non una persona: può sbagliare.

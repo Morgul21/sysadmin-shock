@@ -249,7 +249,11 @@ function render(view) {
   else renderExercise(view);
   renderHints();
   $("tutor").hidden = !isTicket;
-  if (isTicket) loadTutor();
+  $("llm").hidden = !isTicket;
+  if (isTicket) {
+    loadTutor();
+    loadLlm();
+  }
   stopFixerPolling();
   $("fixer").open = false;
   showFixer();
@@ -362,6 +366,96 @@ async function askTutor(event) {
   }
 }
 
+// --- Modello AI: provider e modello di tutor e fixer. La API key no: resta nel .env del server.
+
+let llm = null;
+
+function renderLlm(settings) {
+  llm = settings;
+  const label = (id) => llm.providers.find((p) => p.id === id)?.label || id;
+  $("llm-current").textContent = `${label(llm.provider)}, ${llm.model || "modello non indicato"}` +
+    (llm.chosen ? " (scelto qui)" : " (dal .env)");
+  $("llm-provider").innerHTML = llm.providers.map((p) =>
+    `<option value="${attr(p.id)}"${p.unavailable ? " disabled" : ""}${p.id === llm.provider ? " selected" : ""}>` +
+    `${escape(p.label)}${p.unavailable ? ` (${escape(p.unavailable)})` : ""}</option>`).join("");
+  setModel(llm.model || "");
+  showModels();
+  showDestination();
+}
+
+// I suggerimenti del campo Modello: per Ollama/vLLM i modelli del server, per i cloud il default.
+// Il campo resta libero: si può scrivere un modello che non è in elenco.
+function showModels() {
+  const provider = llm.providers.find((p) => p.id === $("llm-provider").value);
+  $("llm-models").innerHTML = (provider?.models || []).map((m) => `<option value="${attr(m)}"></option>`).join("");
+}
+
+// Il browser filtra i suggerimenti sul testo del campo: con il modello attuale scritto dentro
+// mostrerebbe solo quello. Al focus il campo si svuota (il modello resta come placeholder) e, se
+// non si scrive niente, all'uscita torna com'era.
+function setModel(value) {
+  $("llm-model").value = value;
+  $("llm-model").dataset.previous = "";
+}
+
+function currentModel() {
+  return $("llm-model").value.trim() || $("llm-model").dataset.previous || "";
+}
+
+function openModels() {
+  const input = $("llm-model");
+  if (!input.value) return;
+  input.dataset.previous = input.value;
+  input.dataset.placeholder = input.placeholder;
+  input.placeholder = input.value;
+  input.value = "";
+}
+
+function closeModels() {
+  const input = $("llm-model");
+  if (!input.dataset.previous) return;
+  if (!input.value.trim()) input.value = input.dataset.previous;
+  input.placeholder = input.dataset.placeholder || "";
+  input.dataset.previous = "";
+}
+
+// Dove andrebbero domanda e comandi con il provider selezionato: lo si vede prima di confermare.
+function showDestination() {
+  const provider = llm.providers.find((p) => p.id === $("llm-provider").value);
+  $("llm-destination").textContent = provider ? `Domanda e comandi vanno ${provider.destination}.` : "";
+}
+
+async function loadLlm() {
+  try {
+    renderLlm(await api("/api/llm"));
+  } catch {
+    $("llm").hidden = true; // senza impostazioni il riquadro non serve: il tutor dirà se manca il modello
+  }
+}
+
+async function chooseLlm(event) {
+  event.preventDefault();
+  $("llm-save").disabled = true;
+  showError("");
+  try {
+    renderLlm(await api("/api/llm", "POST", { provider: $("llm-provider").value, model: currentModel() }));
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    $("llm-save").disabled = false;
+  }
+}
+
+function changeProvider() {
+  // Cambiando provider si propone il suo modello: quello attuale, o il default del provider.
+  const id = $("llm-provider").value;
+  const provider = llm.providers.find((p) => p.id === id);
+  setModel(id === llm.provider ? llm.model || "" : provider?.default_model || "");
+  $("llm-model").placeholder = provider?.default_model ? "" : "nome del modello";
+  showModels();
+  showDestination();
+}
+
 // --- "Confronta con l'AI": come ha risolto il ticket il fixer. Mostra la soluzione, quindi compare solo
 // dopo che il ticket è risolto. Di solito è l'ultima esecuzione salvata (subito, senza toccare la
 // sandbox); da lì si può rilanciare il fixer dal vivo, e la pagina ne segue i comandi.
@@ -381,7 +475,14 @@ const nCommands = (n) => `${n} comand${n === 1 ? "o" : "i"}`;
 // Da dove viene quello che si vede: un'esecuzione salvata (con il confronto dei comandi) o nessuna.
 function fixerSource(run) {
   if (!run) return "Non c'è ancora un'esecuzione salvata per questo ticket (le crea breakfix-eval): puoi lanciare l'AI adesso.";
-  if (!run.saved) return "";
+  if (!run.saved) {
+    // Un'esecuzione appena fatta con "Rilancia l'AI": si salva solo se è riuscita.
+    if (run.status !== "done" || !run.live?.written_at) return "";
+    const when = new Date(run.live.written_at).toLocaleString("it-IT",
+      { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const kept = run.result.passed ? "salvata" : "non riuscita, quindi non salvata";
+    return `Esecuzione del ${when}, modello ${run.live.model}: ${kept}.`;
+  }
   const date = new Date(run.saved.written_at).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
   const compare = run.your_commands ? ` Tu hai lanciato ${nCommands(run.your_commands)}, l'AI ${run.result.tool_calls}.` : "";
   return `Esecuzione salvata del ${date}, modello ${run.saved.model}.${compare}`;
@@ -607,6 +708,10 @@ $("next-hint").onclick = () => {
 $("reconnect").onclick = connect;
 $("tutor-form").onsubmit = askTutor;
 $("fixer-start").onclick = startFixer;
+$("llm-form").onsubmit = chooseLlm;
+$("llm-provider").onchange = changeProvider;
+$("llm-model").onfocus = openModels;
+$("llm-model").onblur = closeModels;
 // Invio manda la domanda, Maiusc+Invio va a capo.
 $("tutor-question").onkeydown = (event) => {
   if (event.key === "Enter" && !event.shiftKey) $("tutor-form").requestSubmit();
