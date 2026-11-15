@@ -378,8 +378,45 @@ function renderLlm(settings) {
   $("llm-provider").innerHTML = llm.providers.map((p) =>
     `<option value="${attr(p.id)}"${p.unavailable ? " disabled" : ""}${p.id === llm.provider ? " selected" : ""}>` +
     `${escape(p.label)}${p.unavailable ? ` (${escape(p.unavailable)})` : ""}</option>`).join("");
-  $("llm-model").value = llm.model || "";
+  setModel(llm.model || "");
+  showModels();
   showDestination();
+}
+
+// I suggerimenti del campo Modello: per Ollama/vLLM i modelli del server, per i cloud il default.
+// Il campo resta libero: si può scrivere un modello che non è in elenco.
+function showModels() {
+  const provider = llm.providers.find((p) => p.id === $("llm-provider").value);
+  $("llm-models").innerHTML = (provider?.models || []).map((m) => `<option value="${attr(m)}"></option>`).join("");
+}
+
+// Il browser filtra i suggerimenti sul testo del campo: con il modello attuale scritto dentro
+// mostrerebbe solo quello. Al focus il campo si svuota (il modello resta come placeholder) e, se
+// non si scrive niente, all'uscita torna com'era.
+function setModel(value) {
+  $("llm-model").value = value;
+  $("llm-model").dataset.previous = "";
+}
+
+function currentModel() {
+  return $("llm-model").value.trim() || $("llm-model").dataset.previous || "";
+}
+
+function openModels() {
+  const input = $("llm-model");
+  if (!input.value) return;
+  input.dataset.previous = input.value;
+  input.dataset.placeholder = input.placeholder;
+  input.placeholder = input.value;
+  input.value = "";
+}
+
+function closeModels() {
+  const input = $("llm-model");
+  if (!input.dataset.previous) return;
+  if (!input.value.trim()) input.value = input.dataset.previous;
+  input.placeholder = input.dataset.placeholder || "";
+  input.dataset.previous = "";
 }
 
 // Dove andrebbero domanda e comandi con il provider selezionato: lo si vede prima di confermare.
@@ -401,7 +438,7 @@ async function chooseLlm(event) {
   $("llm-save").disabled = true;
   showError("");
   try {
-    renderLlm(await api("/api/llm", "POST", { provider: $("llm-provider").value, model: $("llm-model").value }));
+    renderLlm(await api("/api/llm", "POST", { provider: $("llm-provider").value, model: currentModel() }));
   } catch (error) {
     showError(error.message);
   } finally {
@@ -413,8 +450,9 @@ function changeProvider() {
   // Cambiando provider si propone il suo modello: quello attuale, o il default del provider.
   const id = $("llm-provider").value;
   const provider = llm.providers.find((p) => p.id === id);
-  $("llm-model").value = id === llm.provider ? llm.model || "" : provider?.default_model || "";
+  setModel(id === llm.provider ? llm.model || "" : provider?.default_model || "");
   $("llm-model").placeholder = provider?.default_model ? "" : "nome del modello";
+  showModels();
   showDestination();
 }
 
@@ -665,6 +703,8 @@ $("tutor-form").onsubmit = askTutor;
 $("fixer-start").onclick = startFixer;
 $("llm-form").onsubmit = chooseLlm;
 $("llm-provider").onchange = changeProvider;
+$("llm-model").onfocus = openModels;
+$("llm-model").onblur = closeModels;
 // Invio manda la domanda, Maiusc+Invio va a capo.
 $("tutor-question").onkeydown = (event) => {
   if (event.key === "Enter" && !event.shiftKey) $("tutor-form").requestSubmit();

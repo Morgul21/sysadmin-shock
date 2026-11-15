@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import json
 import queue
 import time
 import tempfile
@@ -431,6 +433,11 @@ class LlmApiTest(unittest.TestCase):
                if not k.startswith(("LLM_", "OLLAMA_")) and k not in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                                                                      "GOOGLE_API_KEY")}
         env.update(LLM_PROVIDER="ollama", OPENAI_API_KEY="sk-segreta-di-prova")
+        # Niente chiamate vere al server Ollama: il test non deve dipendere da cosa gira sulla macchina.
+        self.real_served_models = web._served_models
+        served = mock.patch.object(web, "_served_models", return_value=[])
+        self.served = served.start()
+        self.addCleanup(served.stop)
         for patch in (mock.patch.dict("os.environ", env, clear=True), mock.patch.object(web, "_llm_choice", None)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -471,6 +478,27 @@ class LlmApiTest(unittest.TestCase):
     def test_the_api_key_never_reaches_the_page(self) -> None:
         for response in (self.client.get("/api/llm"), self.client.post("/api/llm", json={"provider": "openai"})):
             self.assertNotIn("sk-segreta-di-prova", response.text)
+
+    def test_model_suggestions(self) -> None:
+        # Ollama/vLLM: il modello in uso e quelli del server; i cloud: solo il loro default, senza chiamate.
+        self.served.return_value = ["llama3.2", "breakfix-qwen3-8b"]
+        settings = self.client.get("/api/llm").json()
+        self.assertEqual(self._provider(settings, "ollama")["models"], ["breakfix-qwen3-8b", "llama3.2"])
+        self.assertEqual(self._provider(settings, "openai")["models"], ["gpt-5.6-luna"])
+        self.assertEqual(self._provider(settings, "google")["models"], [])
+        self.assertEqual(self.served.call_count, 1)
+
+    def test_served_models_reads_the_server_and_survives_failures(self) -> None:
+        body = io.BytesIO(json.dumps({"data": [{"id": "qwen3.8-27b"}, {"id": "a"}, {"nope": 1}]}).encode())
+        with mock.patch.dict("os.environ", {"OLLAMA_BASE_URL": "http://10.0.0.5:8000/v1/"}), \
+                mock.patch.object(web, "urlopen", return_value=body) as urlopen:
+            self.assertEqual(self.real_served_models(), ["a", "qwen3.8-27b"])
+        self.assertEqual(urlopen.call_args.args[0], "http://10.0.0.5:8000/v1/models")
+        for failure in (OSError("connection refused"), io.BytesIO(b"<html>")):
+            with self.subTest(failure), mock.patch.object(
+                    web, "urlopen", **({"side_effect": failure} if isinstance(failure, Exception)
+                                       else {"return_value": failure})):
+                self.assertEqual(self.real_served_models(), [])
 
     def test_bad_requests_are_rejected(self) -> None:
         for body in ({"provider": "mistral"}, {"provider": "ollama", "model": "qwen; rm -rf /"}):

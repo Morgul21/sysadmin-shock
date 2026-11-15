@@ -38,6 +38,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlsplit
+from urllib.request import urlopen
 
 import docker
 from dotenv import load_dotenv
@@ -422,19 +423,43 @@ def _destination(provider: str) -> str:
     return "al modello locale, sul PC" if local else f"al server {host}"
 
 
+def _served_models() -> list[str]:
+    """I modelli che il server Ollama/vLLM ha davvero (GET /v1/models), o [] se non risponde.
+
+    Solo per Ollama/vLLM: è in rete locale e non chiede una chiave. Ai provider cloud non si chiede
+    l'elenco: sarebbe una chiamata autenticata, e lenta, a ogni apertura del riquadro.
+    """
+    url = os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL).rstrip("/") + "/models"
+    try:
+        with urlopen(url, timeout=2) as response:
+            data = json.load(response).get("data", [])
+        return sorted({m["id"] for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)})
+    except (OSError, ValueError, AttributeError):  # server spento, URL sbagliato, risposta non JSON
+        return []
+
+
+def _suggestions(provider: str, *known: str | None) -> list[str]:
+    """I modelli proposti nel menu del campo Modello: il campo resta libero, sono solo suggerimenti."""
+    served = _served_models() if provider == "ollama" else []
+    return list(dict.fromkeys(m for m in (*known, *served) if m))
+
+
 def llm_view() -> dict[str, Any]:
     env_provider, env_model = _env_llm()
     provider, model = _llm_choice or (env_provider, env_model)
+    providers = []
+    for p, label in PROVIDERS.items():
+        # Il modello proposto per il provider del .env è quello del .env: il default del codice
+        # (es. breakfix-qwen3-8b) può non esistere sul server configurato (es. un vLLM con qwen3.8-27b).
+        default = env_model if p == env_provider else DEFAULT_MODELS.get(p)
+        providers.append({"id": p, "label": label, "default_model": default,
+                          "models": _suggestions(p, model if p == provider else None, default),
+                          "unavailable": _unavailable(p), "destination": _destination(p)})
     return {
         "provider": provider, "model": model, "chosen": _llm_choice is not None,
         "env": {"provider": env_provider, "model": env_model},
         "destination": _destination(provider) if provider in PROVIDERS else "",
-        # Il modello proposto per il provider del .env è quello del .env: il default del codice
-        # (es. breakfix-qwen3-8b) può non esistere sul server configurato (es. un vLLM con qwen3.8-27b).
-        "providers": [{"id": p, "label": label,
-                       "default_model": env_model if p == env_provider else DEFAULT_MODELS.get(p),
-                       "unavailable": _unavailable(p), "destination": _destination(p)}
-                      for p, label in PROVIDERS.items()],
+        "providers": providers,
     }
 
 

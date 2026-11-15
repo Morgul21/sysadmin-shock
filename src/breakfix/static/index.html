@@ -86,7 +86,8 @@
           poi torna quella del .env; gli eval usano sempre il .env.</p>
         <form id="llm-form" class="llm-form">
           <label>Provider <select id="llm-provider"></select></label>
-          <label>Modello <input id="llm-model" autocomplete="off" spellcheck="false" maxlength="100"></label>
+          <label>Modello <input id="llm-model" list="llm-models" autocomplete="off" spellcheck="false" maxlength="100"></label>
+          <datalist id="llm-models"></datalist>
           <button id="llm-save">Usa questo modello</button>
         </form>
         <p id="llm-destination" class="small"></p>
