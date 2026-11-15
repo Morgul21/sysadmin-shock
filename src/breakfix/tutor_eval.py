@@ -144,7 +144,7 @@ async def judge(scenario: Scenario, case: Case, answer: str, client: Client) -> 
         server_map=tutor.SERVER_MAP,
         target=tutor.fallback_hint(scenario, case.hints_shown), question=case.question, answer=answer,
     )
-    response = await client.a_invoke(prompt, system_prompt=JUDGE_SYSTEM, **generation_kwargs())
+    response = await client.a_invoke(prompt, system_prompt=JUDGE_SYSTEM, **generation_kwargs(client))
     return parse_judge(response.text)
 
 

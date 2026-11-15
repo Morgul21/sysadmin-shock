@@ -43,6 +43,14 @@ class GenerationKwargsTest(unittest.TestCase):
         with llm_env(LLM_REASONING_EFFORT="none"):
             self.assertEqual(generation_kwargs()["reasoning_effort"], "none")
 
+    def test_reasoning_effort_only_for_ollama_and_vllm(self) -> None:
+        # Il .env pensato per qwen su Ollama vale anche quando nella pagina si sceglie OpenAI: la sua
+        # Responses API rifiuta reasoning_effort (TypeError), quindi a lui non va passato.
+        with llm_env(LLM_REASONING_EFFORT="none", OPENAI_API_KEY="sk-prova"):
+            self.assertEqual(generation_kwargs(build_llm_client("ollama", "qwen3:8b"))["reasoning_effort"], "none")
+            self.assertEqual(generation_kwargs(build_llm_client("openai", "gpt-5.6-luna")),
+                             {"max_tokens": MAX_OUTPUT_TOKENS})
+
 
 class SettingsTest(unittest.TestCase):
     def test_settings_set_after_import_are_used(self) -> None:

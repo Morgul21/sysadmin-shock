@@ -420,5 +420,65 @@ class FixerApiTest(unittest.TestCase):
         self.assertIsNone(self._wait()["saved"])
 
 
+class LlmApiTest(unittest.TestCase):
+    """Il riquadro "Modello AI": provider e modello si scelgono nella pagina, la API key resta nel .env."""
+
+    def setUp(self) -> None:
+        import os
+
+        self.client = TestClient(web.app)
+        env = {k: v for k, v in os.environ.items()
+               if not k.startswith(("LLM_", "OLLAMA_")) and k not in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+                                                                     "GOOGLE_API_KEY")}
+        env.update(LLM_PROVIDER="ollama", OPENAI_API_KEY="sk-segreta-di-prova")
+        for patch in (mock.patch.dict("os.environ", env, clear=True), mock.patch.object(web, "_llm_choice", None)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def _provider(self, settings: dict, provider: str) -> dict:
+        return next(p for p in settings["providers"] if p["id"] == provider)
+
+    def test_without_a_choice_it_is_the_env(self) -> None:
+        settings = self.client.get("/api/llm").json()
+        self.assertEqual((settings["provider"], settings["model"], settings["chosen"]),
+                         ("ollama", "breakfix-qwen3-8b", False))
+        self.assertIn("locale", settings["destination"])
+        self.assertIsNone(self._provider(settings, "openai")["unavailable"])
+        self.assertIn("cloud", self._provider(settings, "openai")["destination"])
+
+    def test_a_provider_without_key_cannot_be_chosen(self) -> None:
+        with mock.patch.dict("os.environ", {"OPENAI_API_KEY": ""}):
+            self.assertIn("OPENAI_API_KEY", self._provider(self.client.get("/api/llm").json(), "openai")["unavailable"])
+            response = self.client.post("/api/llm", json={"provider": "openai"})
+        self.assertEqual(response.status_code, 422)
+        self.assertIsNone(web._llm_choice)
+
+    def test_the_choice_is_used_by_tutor_and_fixer(self) -> None:
+        settings = self.client.post("/api/llm", json={"provider": "openai", "model": ""}).json()
+        self.assertEqual((settings["provider"], settings["model"], settings["chosen"]), ("openai", "gpt-5.6-luna", True))
+        self.assertEqual(web._llm_client("tutor").model_name, "gpt-5.6-luna")
+        # Tornando al provider del .env senza indicare il modello, vale quello del .env.
+        with mock.patch.dict("os.environ", {"LLM_MODEL": "qwen3.8-27b",
+                                            "OLLAMA_BASE_URL": "http://10.0.0.5:8000/v1"}):
+            # La pagina, tornando su Ollama, propone il modello del .env, non il default del codice.
+            self.assertEqual(self._provider(self.client.get("/api/llm").json(), "ollama")["default_model"],
+                             "qwen3.8-27b")
+            settings = self.client.post("/api/llm", json={"provider": "ollama"}).json()
+            self.assertEqual(settings["model"], "qwen3.8-27b")
+            self.assertEqual(settings["destination"], "al server 10.0.0.5")
+            self.assertEqual(web._llm_client("tutor").base_url, "http://10.0.0.5:8000/v1")
+
+    def test_the_api_key_never_reaches_the_page(self) -> None:
+        for response in (self.client.get("/api/llm"), self.client.post("/api/llm", json={"provider": "openai"})):
+            self.assertNotIn("sk-segreta-di-prova", response.text)
+
+    def test_bad_requests_are_rejected(self) -> None:
+        for body in ({"provider": "mistral"}, {"provider": "ollama", "model": "qwen; rm -rf /"}):
+            with self.subTest(body):
+                self.assertEqual(self.client.post("/api/llm", json=body).status_code, 422)
+        self.assertEqual(self.client.post("/api/llm", json={"provider": "openai"}, headers=FOREIGN).status_code, 403)
+        self.assertIsNone(web._llm_choice)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -472,7 +472,7 @@ async def _run_until_saved(task: str, client: Client, bench: Workbench) -> Agent
     for _ in range(MAX_NUDGES + 1):
         agent = Agent(name="author", client=client, system_prompt=system_prompt(bench.max_attempts, bench.existing),
                       tools=[bench.tool()], max_steps=steps_left, stateless=False)
-        result = await AgentRunner().a_run(agent, prompt, memory=memory, **generation_kwargs())
+        result = await AgentRunner().a_run(agent, prompt, memory=memory, **generation_kwargs(client))
         if result.final_step is None or bench.saved or bench.attempts_left <= 0:
             break
         steps_left -= result.final_step.index

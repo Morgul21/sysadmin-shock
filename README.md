@@ -201,7 +201,8 @@ Gira anche solo su CPU, con il ragionamento spento (`LLM_REASONING_EFFORT=none`,
 Il 4B (`qwen3:4b-instruct`, [ollama/Modelfile](ollama/Modelfile), `LLM_MODEL=breakfix-qwen3`) è più
 veloce (circa 18 token/s su un Core Ultra 7) ma come tutor perde il filo. Un server vLLM, o un altro
 endpoint compatibile OpenAI, si usa come Ollama impostando `OLLAMA_BASE_URL` e `LLM_MODEL`. Per un
-modello cloud si impostano `LLM_PROVIDER` e la sua API key nel `.env` (vedi [Configurazione](#configurazione)).
+modello cloud si mette la sua API key nel `.env` e lo si sceglie nel riquadro *Modello AI* della pagina,
+oppure con `LLM_PROVIDER` (vedi [Configurazione](#configurazione)).
 
 ## Avvio
 
@@ -267,6 +268,12 @@ breakfix-sandbox down
   comando del fix), *Chiedi al tutor* e il pulsante *Verifica*. Il tutor vede i comandi lanciati nel
   terminale e quanti indizi sono aperti; se il guardrail sostituisce una risposta, la pagina lo dice.
   La conversazione è la stessa di `breakfix-tutor` e riparte con un ticket nuovo.
+  Il riquadro **Modello AI** sceglie provider e modello del tutor e di *Rilancia l'AI* (Ollama o vLLM,
+  OpenAI, Anthropic, Google): prima di confermare dice dove andranno domanda e comandi (sul PC, a un
+  server in rete, a un provider cloud). I provider senza API key nel `.env`, o senza il client
+  installato, sono elencati ma non si possono scegliere. Dalla pagina non passano né la API key né
+  l'indirizzo del server: restano nel `.env`. La scelta vale finché l'app è accesa; gli eval e la CLI
+  usano sempre il `.env`, così i risultati restano riproducibili.
 
 Dopo il PASS su un ticket compare **Confronta con l'AI**: come ha affrontato lo stesso ticket il
 fixer. Compare solo a ticket risolto, perché mostra la soluzione: prima, renderebbe inutile il

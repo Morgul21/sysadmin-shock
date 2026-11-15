@@ -188,7 +188,7 @@ async def ask(
         try:
             agent = Agent(name="tutor", client=client, system_prompt=system_prompt(scenario), max_steps=1)
             # Il runner lavora su una copia della memory: quella vera la aggiorniamo noi, sotto.
-            result = await AgentRunner().a_run(agent, message, memory=memory, **generation_kwargs())
+            result = await AgentRunner().a_run(agent, message, memory=memory, **generation_kwargs(client))
             raw = result.final_step.text.strip() if result.final_step else ""
             if not raw:
                 raise RuntimeError("il modello non ha risposto")

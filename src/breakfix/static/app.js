@@ -249,7 +249,11 @@ function render(view) {
   else renderExercise(view);
   renderHints();
   $("tutor").hidden = !isTicket;
-  if (isTicket) loadTutor();
+  $("llm").hidden = !isTicket;
+  if (isTicket) {
+    loadTutor();
+    loadLlm();
+  }
   stopFixerPolling();
   $("fixer").open = false;
   showFixer();
@@ -360,6 +364,58 @@ async function askTutor(event) {
     $("tutor-send").disabled = false;
     $("tutor-send").textContent = "Chiedi";
   }
+}
+
+// --- Modello AI: provider e modello di tutor e fixer. La API key no: resta nel .env del server.
+
+let llm = null;
+
+function renderLlm(settings) {
+  llm = settings;
+  const label = (id) => llm.providers.find((p) => p.id === id)?.label || id;
+  $("llm-current").textContent = `${label(llm.provider)}, ${llm.model || "modello non indicato"}` +
+    (llm.chosen ? " (scelto qui)" : " (dal .env)");
+  $("llm-provider").innerHTML = llm.providers.map((p) =>
+    `<option value="${attr(p.id)}"${p.unavailable ? " disabled" : ""}${p.id === llm.provider ? " selected" : ""}>` +
+    `${escape(p.label)}${p.unavailable ? ` (${escape(p.unavailable)})` : ""}</option>`).join("");
+  $("llm-model").value = llm.model || "";
+  showDestination();
+}
+
+// Dove andrebbero domanda e comandi con il provider selezionato: lo si vede prima di confermare.
+function showDestination() {
+  const provider = llm.providers.find((p) => p.id === $("llm-provider").value);
+  $("llm-destination").textContent = provider ? `Domanda e comandi vanno ${provider.destination}.` : "";
+}
+
+async function loadLlm() {
+  try {
+    renderLlm(await api("/api/llm"));
+  } catch {
+    $("llm").hidden = true; // senza impostazioni il riquadro non serve: il tutor dirà se manca il modello
+  }
+}
+
+async function chooseLlm(event) {
+  event.preventDefault();
+  $("llm-save").disabled = true;
+  showError("");
+  try {
+    renderLlm(await api("/api/llm", "POST", { provider: $("llm-provider").value, model: $("llm-model").value }));
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    $("llm-save").disabled = false;
+  }
+}
+
+function changeProvider() {
+  // Cambiando provider si propone il suo modello: quello attuale, o il default del provider.
+  const id = $("llm-provider").value;
+  const provider = llm.providers.find((p) => p.id === id);
+  $("llm-model").value = id === llm.provider ? llm.model || "" : provider?.default_model || "";
+  $("llm-model").placeholder = provider?.default_model ? "" : "nome del modello";
+  showDestination();
 }
 
 // --- "Confronta con l'AI": come ha risolto il ticket il fixer. Mostra la soluzione, quindi compare solo
@@ -607,6 +663,8 @@ $("next-hint").onclick = () => {
 $("reconnect").onclick = connect;
 $("tutor-form").onsubmit = askTutor;
 $("fixer-start").onclick = startFixer;
+$("llm-form").onsubmit = chooseLlm;
+$("llm-provider").onchange = changeProvider;
 // Invio manda la domanda, Maiusc+Invio va a capo.
 $("tutor-question").onkeydown = (event) => {
   if (event.key === "Enter" && !event.shiftKey) $("tutor-form").requestSubmit();

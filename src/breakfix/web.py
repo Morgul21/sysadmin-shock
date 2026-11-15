@@ -26,6 +26,7 @@ import argparse
 import ast
 import asyncio
 import contextlib
+import importlib.util
 import json
 import os
 import re
@@ -36,6 +37,7 @@ import webbrowser
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import docker
 from dotenv import load_dotenv
@@ -47,7 +49,8 @@ from starlette.datastructures import Headers
 from pydantic import BaseModel, Field
 
 from breakfix import lessons, sandbox, tutor
-from breakfix.agent import AgentRunError, build_llm_client, default_audit_dir, utf8_console
+from breakfix.agent import (API_KEY_VARS, DEFAULT_MODELS, OLLAMA_BASE_URL, AgentRunError, build_llm_client,
+                            default_audit_dir, utf8_console)
 from breakfix.evaluate import EVAL_DIR, evaluate_scenario
 from breakfix.guardrail import BLOCKED_PREFIX
 from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
@@ -374,9 +377,96 @@ def tutor_conversation() -> list[dict[str, Any]]:
     return tutor.load_conversation(sandbox.container_id()).transcript
 
 
+# --- Il modello di tutor e fixer: dal .env, oppure scelto nella pagina ---------------------------
+#
+# La pagina sceglie provider e modello, mai la API key: quella resta nel .env (non passa dal browser
+# e non finisce nei log). La scelta vale finché l'app è accesa; al riavvio torna quella del .env.
+# Gli eval e la CLI usano sempre il .env, così i numeri del README restano riproducibili.
+
+PROVIDERS = {"ollama": "Ollama o vLLM", "openai": "OpenAI", "anthropic": "Anthropic", "google": "Google"}
+CLIENT_MODULES = {"openai": "datapizza.clients.openai", "anthropic": "datapizza.clients.anthropic",
+                  "google": "datapizza.clients.google"}
+MODEL_NAME = re.compile(r"[\w.:/@-]{1,100}")
+
+_llm_choice: tuple[str, str] | None = None  # (provider, modello) scelti nella pagina
+
+
+class LlmRequest(BaseModel):
+    provider: str
+    model: str = Field(default="", max_length=100)
+
+
+def _env_llm() -> tuple[str, str | None]:
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    return provider, os.getenv("LLM_MODEL") or DEFAULT_MODELS.get(provider)
+
+
+def _unavailable(provider: str) -> str | None:
+    """Perché un provider non si può usare da qui, o None. Ollama non chiede una chiave."""
+    if provider == "ollama":
+        return None
+    if importlib.util.find_spec(CLIENT_MODULES[provider]) is None:
+        return f"client non installato (pip install -e .[{provider}])"
+    key_var = API_KEY_VARS[provider]
+    if not (os.getenv(key_var) or os.getenv("LLM_API_KEY")):
+        return f"manca {key_var} nel .env"
+    return None
+
+
+def _destination(provider: str) -> str:
+    """Dove vanno domanda e comandi con questo provider: lo dice la pagina, prima di scegliere."""
+    if provider != "ollama":
+        return f"al provider cloud {PROVIDERS[provider]}: domanda e comandi escono dal PC"
+    host = urlsplit(os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL)).hostname or "?"
+    local = host in ("localhost", "127.0.0.1", "host.docker.internal")
+    return "al modello locale, sul PC" if local else f"al server {host}"
+
+
+def llm_view() -> dict[str, Any]:
+    env_provider, env_model = _env_llm()
+    provider, model = _llm_choice or (env_provider, env_model)
+    return {
+        "provider": provider, "model": model, "chosen": _llm_choice is not None,
+        "env": {"provider": env_provider, "model": env_model},
+        "destination": _destination(provider) if provider in PROVIDERS else "",
+        # Il modello proposto per il provider del .env è quello del .env: il default del codice
+        # (es. breakfix-qwen3-8b) può non esistere sul server configurato (es. un vLLM con qwen3.8-27b).
+        "providers": [{"id": p, "label": label,
+                       "default_model": env_model if p == env_provider else DEFAULT_MODELS.get(p),
+                       "unavailable": _unavailable(p), "destination": _destination(p)}
+                      for p, label in PROVIDERS.items()],
+    }
+
+
+@app.get("/api/llm")
+def llm_settings() -> dict[str, Any]:
+    return llm_view()
+
+
+@app.post("/api/llm", dependencies=[Depends(require_same_origin)])
+def choose_llm(request: LlmRequest) -> dict[str, Any]:
+    global _llm_choice
+    provider, model = request.provider.lower(), request.model.strip()
+    if provider not in PROVIDERS:
+        raise HTTPException(422, f"provider sconosciuto: {request.provider}")
+    if reason := _unavailable(provider):
+        raise HTTPException(422, f"{PROVIDERS[provider]} non disponibile: {reason}")
+    if not model:  # lo stesso provider del .env tiene il suo modello, gli altri il loro default
+        env_provider, env_model = _env_llm()
+        model = (env_model if provider == env_provider else None) or DEFAULT_MODELS.get(provider) or ""
+    if not MODEL_NAME.fullmatch(model):
+        raise HTTPException(422, "indica il nome del modello (lettere, cifre e . : / @ - _)")
+    try:  # costruire il client non chiama il modello: controlla solo che la configurazione regga
+        build_llm_client(provider, model)
+    except (SystemExit, ImportError, ValueError) as exc:
+        raise HTTPException(422, f"modello non utilizzabile: {getattr(exc, 'code', None) or exc}") from exc
+    _llm_choice = (provider, model)
+    return llm_view()
+
+
 def _llm_client(who: str) -> Any:
     try:
-        return build_llm_client()
+        return build_llm_client(*_llm_choice) if _llm_choice else build_llm_client()
     except SystemExit as exc:  # build_llm_client è pensata per la CLI: esce con il messaggio
         raise HTTPException(503, f"{who} non configurato: {exc.code}") from exc
 

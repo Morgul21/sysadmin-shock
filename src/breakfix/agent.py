@@ -21,6 +21,7 @@ from mcp.client.stdio import get_default_environment
 from datapizza.agents import Agent
 from datapizza.agents.runner import AgentRunner, AgentRunnerResult
 from datapizza.clients.factory import ClientFactory
+from datapizza.clients.openai_like import OpenAILikeClient
 from datapizza.core.clients.client import Client
 from datapizza.memory import Memory
 from datapizza.tools.mcp_client import MCPClient
@@ -84,12 +85,15 @@ NUDGE = ("Non hai ancora concluso: hai scritto il prossimo passo senza eseguirlo
 MAX_OUTPUT_TOKENS = 16000
 
 
-def generation_kwargs() -> dict:
+def generation_kwargs(client: Client | None = None) -> dict:
     """Parametri di generazione passati al client a ogni chiamata del modello."""
     kwargs = {"max_tokens": MAX_OUTPUT_TOKENS}
     # Es. "none" per qwen3:8b su Ollama: è un modello ibrido che altrimenti ragiona prima di ogni
-    # risposta (su CPU 37 s invece di 5 s per una riga). Da impostare solo per i modelli che lo supportano.
-    if effort := os.getenv("LLM_REASONING_EFFORT"):
+    # risposta (su CPU 37 s invece di 5 s per una riga). Vale solo per Ollama/vLLM (chat completions):
+    # il client OpenAI usa la Responses API, che rifiuta reasoning_effort, e gli altri non lo conoscono.
+    # Serve da quando il provider si sceglie nella pagina: il .env resta quello pensato per Ollama.
+    effort = os.getenv("LLM_REASONING_EFFORT")
+    if effort and (client is None or isinstance(client, OpenAILikeClient)):
         kwargs["reasoning_effort"] = effort
     return kwargs
 
@@ -179,7 +183,7 @@ async def _run_until_concluded(task: str, client: Client, tools: list, memory: M
     for _ in range(MAX_NUDGES + 1):
         agent = Agent(name="fixer", client=client, system_prompt=SYSTEM_PROMPT, tools=tools,
                       max_steps=steps_left, stateless=False)
-        result = await AgentRunner().a_run(agent, prompt, memory=memory, **generation_kwargs())
+        result = await AgentRunner().a_run(agent, prompt, memory=memory, **generation_kwargs(client))
         if result.final_step is None or is_conclusion(result.final_step.text):
             break
         steps_left -= result.final_step.index
