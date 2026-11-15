@@ -475,7 +475,14 @@ const nCommands = (n) => `${n} comand${n === 1 ? "o" : "i"}`;
 // Da dove viene quello che si vede: un'esecuzione salvata (con il confronto dei comandi) o nessuna.
 function fixerSource(run) {
   if (!run) return "Non c'è ancora un'esecuzione salvata per questo ticket (le crea breakfix-eval): puoi lanciare l'AI adesso.";
-  if (!run.saved) return "";
+  if (!run.saved) {
+    // Un'esecuzione appena fatta con "Rilancia l'AI": si salva solo se è riuscita.
+    if (run.status !== "done" || !run.live?.written_at) return "";
+    const when = new Date(run.live.written_at).toLocaleString("it-IT",
+      { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const kept = run.result.passed ? "salvata" : "non riuscita, quindi non salvata";
+    return `Esecuzione del ${when}, modello ${run.live.model}: ${kept}.`;
+  }
   const date = new Date(run.saved.written_at).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
   const compare = run.your_commands ? ` Tu hai lanciato ${nCommands(run.your_commands)}, l'AI ${run.result.tool_calls}.` : "";
   return `Esecuzione salvata del ${date}, modello ${run.saved.model}.${compare}`;

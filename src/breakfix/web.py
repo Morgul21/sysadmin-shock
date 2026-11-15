@@ -35,6 +35,7 @@ import subprocess
 import threading
 import webbrowser
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -52,7 +53,7 @@ from pydantic import BaseModel, Field
 from breakfix import lessons, sandbox, tutor
 from breakfix.agent import (API_KEY_VARS, DEFAULT_MODELS, OLLAMA_BASE_URL, AgentRunError, build_llm_client,
                             default_audit_dir, utf8_console)
-from breakfix.evaluate import EVAL_DIR, evaluate_scenario
+from breakfix.evaluate import EVAL_DIR, evaluate_scenario, write_report
 from breakfix.guardrail import BLOCKED_PREFIX
 from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
 from breakfix.lessons import Exercise, LessonLab
@@ -214,9 +215,12 @@ class FixerRun:
     result: dict[str, Any] | None = None
     error: str | None = None
     task: asyncio.Task | None = None
+    model: str | None = None
+    finished_at: str | None = None
 
     def view(self) -> dict[str, Any]:
-        return {"status": self.status, "steps": self.steps, "result": self.result, "error": self.error, "saved": None}
+        return {"status": self.status, "steps": self.steps, "result": self.result, "error": self.error, "saved": None,
+                "live": {"model": self.model, "written_at": self.finished_at}}
 
 
 # Una sola esecuzione per volta: c'è una sola sandbox.
@@ -240,7 +244,15 @@ async def _run_fixer(run: FixerRun, scenario: Scenario, client: Any) -> None:
         run.status, run.error = "error", f"{type(exc).__name__}: {exc}"
         return
     run.result = _result_view(asdict(row))
+    run.finished_at = datetime.now(timezone.utc).isoformat()
     run.status = "done"
+    # Riuscita: si salva come un report di `breakfix-eval`, così resta anche dopo un riavvio del server.
+    # Una fallita no: non deve prendere il posto della soluzione salvata.
+    if row.passed:
+        try:
+            await asyncio.to_thread(write_report, [row], client.model_name, EVAL_DIR)
+        except OSError:  # cartella non scrivibile: il risultato si vede comunque, finché il server è acceso
+            pass
 
 
 def _result_view(row: dict[str, Any]) -> dict[str, Any]:
@@ -384,9 +396,8 @@ def tutor_conversation() -> list[dict[str, Any]]:
 # e non finisce nei log). La scelta vale finché l'app è accesa; al riavvio torna quella del .env.
 # Gli eval e la CLI usano sempre il .env, così i numeri del README restano riproducibili.
 
-PROVIDERS = {"ollama": "Ollama o vLLM", "openai": "OpenAI", "anthropic": "Anthropic", "google": "Google"}
-CLIENT_MODULES = {"openai": "datapizza.clients.openai", "anthropic": "datapizza.clients.anthropic",
-                  "google": "datapizza.clients.google"}
+PROVIDERS = {"ollama": "Ollama o vLLM", "openai": "OpenAI", "anthropic": "Anthropic"}
+CLIENT_MODULES = {"openai": "datapizza.clients.openai", "anthropic": "datapizza.clients.anthropic"}
 MODEL_NAME = re.compile(r"[\w.:/@-]{1,100}")
 
 _llm_choice: tuple[str, str] | None = None  # (provider, modello) scelti nella pagina
@@ -546,7 +557,7 @@ async def start_fixer() -> dict[str, Any]:
     if scenario is None:
         raise HTTPException(409, "l'AI ripara i ticket: avviane uno dalle Challenge")
     client = _llm_client("modello")
-    run = FixerRun(scenario=scenario.id)
+    run = FixerRun(scenario=scenario.id, model=client.model_name)
     run.task = asyncio.create_task(_run_fixer(run, scenario, client))  # il riferimento la tiene viva
     _fixer = run
     return run.view()

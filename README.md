@@ -269,7 +269,7 @@ breakfix-sandbox down
   terminale e quanti indizi sono aperti; se il guardrail sostituisce una risposta, la pagina lo dice.
   La conversazione è la stessa di `breakfix-tutor` e riparte con un ticket nuovo.
   Il riquadro **Modello AI** sceglie provider e modello del tutor e di *Rilancia l'AI* (Ollama o vLLM,
-  OpenAI, Anthropic, Google): prima di confermare dice dove andranno domanda e comandi (sul PC, a un
+  OpenAI, Anthropic): prima di confermare dice dove andranno domanda e comandi (sul PC, a un
   server in rete, a un provider cloud). I provider senza API key nel `.env`, o senza il client
   installato, sono elencati ma non si possono scegliere. Il campo del modello è libero; per Ollama o
   vLLM propone i modelli che il server ha davvero (`/v1/models`), per i cloud il modello predefinito. Dalla pagina non passano né la API key né

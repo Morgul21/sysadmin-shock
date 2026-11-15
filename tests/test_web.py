@@ -365,6 +365,21 @@ class FixerApiTest(unittest.TestCase):
         result = self._wait()["result"]
         self.assertFalse(result["passed"])
         self.assertIn("Verifica", result["answer"])
+        self.assertEqual(list(self.eval_dir.glob("*.json")), [])  # fallita: non si salva
+
+    def test_a_passed_live_run_is_saved_and_survives_a_restart(self) -> None:
+        self.client.post("/api/fixer")
+        self._wait()
+        self.assertEqual(len(list(self.eval_dir.glob("[0-9]*.json"))), 1)
+        live = self.client.get("/api/fixer").json()["live"]
+        self.assertEqual(live["model"], "scripted")
+        self.assertTrue(live["written_at"])
+        with mock.patch.object(web, "_fixer", None):  # come dopo un riavvio del server
+            saved = self.client.get("/api/fixer").json()
+        self.assertEqual(saved["saved"]["model"], "scripted")
+        self.assertTrue(saved["result"]["passed"])
+        self.assertEqual([s["command"] for s in saved["steps"]],
+                         ["ls -l /srv/app", "chmod 777 /srv/app/run.sh", "chmod 755 /srv/app/run.sh"])
 
     def test_only_tickets_and_only_from_the_page(self) -> None:
         self.assertEqual(self.client.post("/api/fixer", headers=FOREIGN).status_code, 403)
@@ -485,8 +500,12 @@ class LlmApiTest(unittest.TestCase):
         settings = self.client.get("/api/llm").json()
         self.assertEqual(self._provider(settings, "ollama")["models"], ["breakfix-qwen3-8b", "llama3.2"])
         self.assertEqual(self._provider(settings, "openai")["models"], ["gpt-5.6-luna"])
-        self.assertEqual(self._provider(settings, "google")["models"], [])
         self.assertEqual(self.served.call_count, 1)
+
+    def test_google_is_not_offered(self) -> None:
+        settings = self.client.get("/api/llm").json()
+        self.assertNotIn("google", [p["id"] for p in settings["providers"]])
+        self.assertEqual(self.client.post("/api/llm", json={"provider": "google"}).status_code, 422)
 
     def test_served_models_reads_the_server_and_survives_failures(self) -> None:
         body = io.BytesIO(json.dumps({"data": [{"id": "qwen3.8-27b"}, {"id": "a"}, {"nope": 1}]}).encode())
