@@ -14,7 +14,8 @@ EX=/srv/esercizi
 pick() { shuf -n 1 -e "$@"; }
 # Un numero a caso tra $1 e $2, e una parola a caso di sei caratteri (per codici e id).
 rnd() { shuf -i "$1-$2" -n 1; }
-word() { tr -dc 'a-z0-9' < /dev/urandom | head -c 6; }
+# word va a capo: dentro $( ) non cambia niente, in un ciclo (for ...; do word; done) dà una parola per riga.
+word() { tr -dc 'a-z0-9' < /dev/urandom | head -c 6; echo; }
 
 # Lo stato di partenza che serve al check (es. i permessi prima della modifica).
 # Chi si esercita è root e potrebbe leggerlo: barerebbe con se stesso, come nei ticket.

@@ -235,7 +235,7 @@ class FakeModel(MockClient):
         self.calls: list[dict] = []
 
     def _invoke(self, input, tools=None, memory=None, system_prompt=None, **kwargs) -> ClientResponse:
-        self.calls.append({"input": "\n".join(str(block.content) for block in input)})
+        self.calls.append({"input": "\n".join(str(block.content) for block in input), "system": system_prompt or ""})
         return ClientResponse(content=[TextBlock(content=self.answer)])
 
 
@@ -529,3 +529,122 @@ class LlmApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GenerateApiTest(unittest.TestCase):
+    """La sezione Genera: guida finta, esercizi in una cartella temporanea, generatore e sandbox sostituiti."""
+
+    def setUp(self) -> None:
+        from breakfix.generator import Draft, write_generated
+        from test_generator import AWK
+        from test_guide import sample_index
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name) / "generati"
+        self.index = sample_index()
+        self.started: list[str] = []
+        self.resets = 0
+        self.model = FakeModel("awk divide la riga in campi: con -F scegli il separatore.")
+        for patch in (
+            mock.patch.dict("os.environ", {"BREAKFIX_GENERATED_DIR": str(self.dir), "LLM_PROVIDER": "ollama",
+                                           "LLM_MODEL": "modello-di-prova",
+                                           "BREAKFIX_AUDIT_DIR": str(Path(tmp.name) / "audit")}),
+            mock.patch.object(web, "_generation", None),
+            mock.patch.object(web, "_fixer", None),
+            mock.patch.object(web, "_llm_choice", None),
+            mock.patch.object(web, "load_index", lambda: self.index),
+            mock.patch.object(web.generator.GeneratedLab, "__init__", return_value=None),
+            mock.patch.object(web.generator.GeneratedLab, "start", lambda lab, e: self.started.append(e.id)),
+            mock.patch("breakfix.sandbox.reset", side_effect=self._reset),
+            mock.patch("breakfix.tutor.STATE_PATH", Path(tmp.name) / "tutor.json"),
+            mock.patch("breakfix.tutor.recent_commands", return_value="cat /srv/esercizi/vendite.csv"),
+            mock.patch("breakfix.sandbox.container_id", return_value="sandbox-1"),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+        write_generated(Draft.from_arguments(AWK), self.dir, passage=self.index.by_id["9.6.1"],
+                        request="insegnami awk", model="m", trace="t")
+        self.client = self.enterContext(TestClient(web.app))
+
+    def _reset(self, *args) -> None:
+        self.resets += 1
+
+    def _active(self, label: str | None):
+        return mock.patch("breakfix.sandbox.active_scenario", return_value=label)
+
+    def test_generated_exercises_are_listed_and_started(self) -> None:
+        data = self.client.get("/api/generati").json()
+        self.assertIsNone(data["guide"]["missing"])
+        exercise = data["exercises"][0]
+        self.assertEqual((exercise["kind"], exercise["id"], exercise["command"], exercise["source"]["section"]),
+                         ("generato", "awk-somma-colonna", "awk", "9.6.1"))
+        self.assertNotIn("solution", json.dumps(data))  # la soluzione non arriva alla pagina
+        self.assertEqual(self.client.post("/api/generati/awk-somma-colonna/start").status_code, 200)
+        self.assertEqual(self.started, ["awk-somma-colonna"])
+        self.assertEqual(self.client.post("/api/generati/non-esiste/start").status_code, 404)
+
+    def test_the_active_exercise_is_checked_with_the_answer(self) -> None:
+        with self._active("generato:awk-somma-colonna"), \
+                mock.patch.object(web.generator.GeneratedLab, "check",
+                                  side_effect=lambda e, a: CheckResult(a == "120", "PASS" if a == "120" else "FAIL")):
+            self.assertEqual(self.client.get("/api/active").json()["id"], "awk-somma-colonna")
+            self.assertFalse(self.client.post("/api/check", json={"answer": "7"}).json()["passed"])
+            self.assertTrue(self.client.post("/api/check", json={"answer": "120"}).json()["passed"])
+
+    def test_the_tutor_follows_generated_exercises_but_not_the_basics(self) -> None:
+        with self._active("generato:awk-somma-colonna"), \
+                mock.patch.object(web, "build_llm_client", side_effect=lambda: self.model), \
+                mock.patch("breakfix.lesson_tutor.current_answer", return_value="120"):
+            entry = self.client.post("/api/tutor", json={"question": "come funziona -F?"}).json()
+            self.assertFalse(entry["blocked"])
+            self.assertIn("awk-somma-colonna", self.model.calls[-1]["system"])
+            self.model.answer = "Fai la somma: viene 120."
+            self.assertTrue(self.client.post("/api/tutor", json={"question": "quanto fa?"}).json()["blocked"])
+        with self._active("esercizio:5.1"):
+            self.assertEqual(self.client.post("/api/tutor", json={"question": "aiuto"}).status_code, 409)
+
+    def test_a_generation_is_followed_and_ends_with_a_healthy_sandbox(self) -> None:
+        import threading
+
+        from breakfix.generator import Generation, get_generated
+
+        release = threading.Event()
+
+        async def fake_generate(request, client, lab, *, on_bench):
+            import asyncio
+            bench = mock.Mock(attempts=[], searches=[{"query": request, "by": "codice", "results": []}], max_attempts=4)
+            on_bench(bench)
+            bench.attempts.append({"draft": {"fonte": "9.6.1"}, "tried_in_sandbox": True,
+                                   "problems": ["giro 1: le due soluzioni non coincidono"], "answers": []})
+            await asyncio.to_thread(release.wait, 5)
+            return Generation(get_generated("awk-somma-colonna", self.dir), bench.attempts, bench.searches,
+                              "Pronto.", Path("audit-abc.json"))
+
+        with mock.patch.object(web.generator, "generate", fake_generate):
+            response = self.client.post("/api/genera", json={"request": "insegnami awk"})
+            self.assertEqual(response.status_code, 202)
+            for path in ("/api/start/1", "/api/learn/1.1", "/api/generati/awk-somma-colonna/start", "/api/genera"):
+                with self.subTest(path):
+                    self.assertEqual(self.client.post(path, json={"request": "altro"}).status_code, 409)
+            running = self.client.get("/api/genera").json()
+            self.assertEqual((running["status"], running["attempts"][0]["ok"]), ("running", False))
+            release.set()
+            for _ in range(100):
+                run = self.client.get("/api/genera").json()
+                if run["status"] != "running":
+                    break
+                time.sleep(0.05)
+        self.assertEqual((run["status"], run["exercise"]["id"], run["audit"]), ("done", "awk-somma-colonna", "audit-abc.json"))
+        self.assertEqual(self.resets, 1)
+
+    def test_bad_requests_and_a_missing_guide(self) -> None:
+        from breakfix.guide import GuideMissing
+
+        for body in ({"request": ""}, {"request": "   "}, {"request": "x" * 301}):
+            with self.subTest(body):
+                self.assertEqual(self.client.post("/api/genera", json=body).status_code, 422)
+        self.assertEqual(self.client.post("/api/genera", json={"request": "awk"}, headers=FOREIGN).status_code, 403)
+        with mock.patch.object(web, "load_index", side_effect=GuideMissing("guida assente")):
+            self.assertEqual(self.client.post("/api/genera", json={"request": "insegnami awk"}).status_code, 503)
+            self.assertEqual(self.client.get("/api/generati").json()["guide"]["missing"], "guida assente")

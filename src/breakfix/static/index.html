@@ -12,6 +12,7 @@
     <h1>Sysadmin Shock</h1>
     <nav class="tabs">
       <a href="#/basi" data-tab="basi">Basi</a>
+      <a href="#/genera" data-tab="genera">Genera</a>
       <a href="#/challenge" data-tab="challenge">Challenge</a>
     </nav>
   </header>
@@ -28,6 +29,48 @@
     <div id="map"></div>
   </main>
 
+  <!-- Genera: un esercizio nuovo su un comando, scritto dall'AI dalla Debian Reference e provato nella sandbox -->
+  <main id="gen-page" hidden>
+    <section class="gen">
+      <h2>Genera un esercizio</h2>
+      <p class="muted">Chiedi il comando che vuoi imparare. L'AI cerca nella <b>Debian Reference</b> i passaggi che ne
+        parlano e scrive un esercizio: una spiegazione, dei file con dati a caso e una domanda a cui rispondere usando
+        il comando. Prima di mostrartelo, il programma lo prova nella sandbox: l'AI scrive due soluzioni, una con il
+        comando e una senza, e l'esercizio vale solo se danno la stessa risposta su tre preparazioni diverse.</p>
+      <p class="muted small">Funziona per i comandi che leggono e cercano nei file (awk, sed, cut, sort, grep, find,
+        wc...). Un esercizio generato non l'ha rivisto una persona: la spiegazione può contenere errori.</p>
+      <p id="gen-guide" class="verdict fail" hidden></p>
+      <p id="gen-error" class="verdict fail" hidden></p>
+
+      <form id="gen-form" class="card gen-form">
+        <label for="gen-request">Cosa vuoi imparare?</label>
+        <div class="tutor-form">
+          <textarea id="gen-request" rows="2" maxlength="300" required
+            placeholder="Es. insegnami a sommare una colonna con awk"></textarea>
+          <button id="gen-send" class="primary">Genera l'esercizio</button>
+        </div>
+        <p class="muted small">Con il modello locale servono alcuni minuti. Intanto la sandbox viene preparata più
+          volte: il ticket o l'esercizio aperto si perde.</p>
+      </form>
+      <div id="gen-llm-slot"></div>
+
+      <div id="gen-run" class="card" hidden>
+        <p id="gen-run-status" class="gen-status" aria-live="polite"></p>
+        <div id="gen-searches"></div>
+        <ol id="gen-attempts" class="gen-attempts"></ol>
+        <details id="gen-details" hidden>
+          <summary>Dettagli dei tentativi (contengono le risposte)</summary>
+          <div id="gen-details-body"></div>
+        </details>
+        <div id="gen-result" hidden></div>
+      </div>
+
+      <h2 class="gen-list-title">Esercizi generati</h2>
+      <p id="gen-empty" class="muted small" hidden>Ancora nessuno: chiedine uno qui sopra.</p>
+      <div id="gen-exercises" class="gen-grid"></div>
+    </section>
+  </main>
+
   <!-- La pagina di lavoro: un esercizio o un ticket, con il terminale accanto -->
   <main id="work-page" hidden>
     <section id="exercise">
@@ -41,8 +84,12 @@
         <p id="lesson-meta" class="muted"></p>
         <nav id="stepper" class="stepper" aria-label="Esercizi della lezione"></nav>
         <details id="lesson-explanation" class="card">
-          <summary>Spiegazione della lezione</summary>
+          <summary id="lesson-explanation-title">Spiegazione della lezione</summary>
           <div id="lesson-text" class="prose"></div>
+          <details id="gen-source" class="gen-source" hidden>
+            <summary></summary>
+            <pre id="gen-source-text"></pre>
+          </details>
         </details>
         <article class="card">
           <p id="exercise-number" class="muted small"></p>
@@ -81,7 +128,7 @@
 
       <details id="llm" class="card" hidden>
         <summary>Modello AI: <span id="llm-current"></span></summary>
-        <p class="muted small">Il modello del tutor e di "Rilancia l'AI". Qui scegli provider e modello, non la
+        <p class="muted small">Il modello del tutor, di "Rilancia l'AI" e di Genera. Qui scegli provider e modello, non la
           API key: quella resta nel file .env e non passa dalla pagina. La scelta vale finché l'app è accesa,
           poi torna quella del .env; gli eval usano sempre il .env.</p>
         <form id="llm-form" class="llm-form">

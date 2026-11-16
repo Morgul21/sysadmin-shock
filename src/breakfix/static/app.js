@@ -1,7 +1,7 @@
 // La pagina: le mappe delle basi e delle challenge (box collegate), e la pagina di lavoro con il
 // terminale. Gli indirizzi stanno nel frammento: #/basi, #/basi/5/2 (lezione 5, esercizio 2),
-// #/challenge, #/challenge/3. Ricaricando si resta dove si era, e la sandbox riparte solo se
-// l'esercizio o il ticket chiesto non è già quello attivo.
+// #/challenge, #/challenge/3, #/genera, #/genera/<id> (un esercizio generato). Ricaricando si resta dove
+// si era, e la sandbox riparte solo se l'esercizio o il ticket chiesto non è già quello attivo.
 
 // Il metodo di un sistemista, uguale per tutti i ticket: non dice la causa, dice da dove partire.
 const FIRST_STEPS = [
@@ -50,9 +50,9 @@ const PROGRESS_KEY = "breakfix.progress";
 function loadProgress() {
   try {
     const saved = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {};
-    return { exercises: saved.exercises || [], tickets: saved.tickets || [] };
+    return { exercises: saved.exercises || [], tickets: saved.tickets || [], generated: saved.generated || [] };
   } catch {
-    return { exercises: [], tickets: [] };
+    return { exercises: [], tickets: [], generated: [] };
   }
 }
 
@@ -126,7 +126,7 @@ function markdown(text) {
 }
 
 function showError(message) {
-  for (const id of ["error", "map-error"]) {
+  for (const id of ["error", "map-error", "gen-error"]) {
     $(id).textContent = message;
     $(id).hidden = !message;
   }
@@ -172,6 +172,7 @@ function section(title, boxes, className = "") {
 
 function showMap(kind) {
   $("work-page").hidden = true;
+  $("gen-page").hidden = true;
   $("map-page").hidden = false;
   $("map-intro").textContent = INTRO[kind];
   $("map").innerHTML = kind === "basi"
@@ -185,6 +186,7 @@ function showMap(kind) {
 
 function showWork() {
   $("map-page").hidden = true;
+  $("gen-page").hidden = true;
   $("work-page").hidden = false;
   requestAnimationFrame(() => fit.fit()); // il terminale era nascosto: va ridimensionato ora
 }
@@ -231,9 +233,20 @@ async function openTicket(number) {
   await start(`/api/start/${number}`);
 }
 
+async function openGenerated(id) {
+  setBack("genera");
+  if (current?.kind === "generato" && current.id === id) {
+    render(current);
+    return;
+  }
+  await start(`/api/generati/${encodeURIComponent(id)}/start`);
+}
+
+const BACK = { basi: "← Basi", challenge: "← Challenge", genera: "← Genera" };
+
 function setBack(kind) {
   $("back").href = `#/${kind}`;
-  $("back").textContent = kind === "basi" ? "← Basi" : "← Challenge";
+  $("back").textContent = BACK[kind];
 }
 
 function render(view) {
@@ -243,14 +256,22 @@ function render(view) {
   $("next").hidden = true;
   $("next-ticket").hidden = true;
   const isTicket = view.kind === "ticket";
+  const isGenerated = view.kind === "generato";
   $("exercise-view").hidden = isTicket;
   $("ticket-view").hidden = !isTicket;
   if (isTicket) renderTicket(view);
+  else if (isGenerated) renderGenerated(view);
   else renderExercise(view);
   renderHints();
-  $("tutor").hidden = !isTicket;
-  $("llm").hidden = !isTicket;
-  if (isTicket) {
+  // Il tutor c'è nei ticket e negli esercizi generati; nelle Basi ci sono spiegazione e indizi scritti a mano.
+  const withTutor = isTicket || isGenerated;
+  $("tutor").hidden = !withTutor;
+  $("tutor").before($("llm")); // in Genera il riquadro sta nella sua pagina: torna qui
+  $("llm").hidden = !withTutor;
+  $("tutor-question").placeholder = isTicket
+    ? "Es. run.sh ha la x per tutti eppure dice Permission denied"
+    : `Es. come si sceglie il separatore dei campi in ${view.command || "questo comando"}?`;
+  if (withTutor) {
     loadTutor();
     loadLlm();
   }
@@ -259,13 +280,37 @@ function render(view) {
   showFixer();
   $("work").hidden = false;
   // L'indirizzo segue quello che è attivo (es. il primo esercizio scelto in automatico).
-  const hash = isTicket ? `#/challenge/${view.number}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
+  const hash = isTicket ? `#/challenge/${view.number}`
+    : isGenerated ? `#/genera/${view.id}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
   if (location.hash !== hash) history.replaceState(null, "", hash);
-  setTab(isTicket ? "challenge" : "basi");
+  setTab(isTicket ? "challenge" : isGenerated ? "genera" : "basi");
   showWork();
 }
 
+// Un esercizio generato nella stessa vista degli esercizi delle Basi: la spiegazione è quella scritta
+// dall'AI, sotto c'è il passaggio della guida da cui nasce.
+function renderGenerated(view) {
+  const s = view.source;
+  $("lesson-heading").textContent = `Esercizio generato · ${view.command}`;
+  $("lesson-meta").textContent = `Dalla ${s.guide} §${s.section} (${s.license}) · richiesta: «${s.request}» · ` +
+    "validato nella sandbox, non rivisto da una persona";
+  $("lesson-explanation-title").textContent = "Spiegazione (scritta dall'AI)";
+  $("lesson-text").innerHTML = markdown(view.explanation);
+  $("lesson-explanation").open = !isDone("generated", view.id);
+  $("gen-source").hidden = false;
+  $("gen-source").querySelector("summary").textContent = `Il passaggio della guida: §${s.section} ${s.title}`;
+  $("gen-source-text").textContent = s.text;
+  $("stepper").innerHTML = "";
+  $("exercise-number").textContent = "Esercizio generato · trova la risposta sul sistema";
+  $("exercise-title").textContent = view.title;
+  $("exercise-task").innerHTML = markdown(view.task);
+  $("answer-row").hidden = false;
+  $("answer").value = "";
+}
+
 function renderExercise(view) {
+  $("lesson-explanation-title").textContent = "Spiegazione della lezione";
+  $("gen-source").hidden = true;
   const lesson = view.lesson;
   const entry = lessons.find((l) => l.number === lesson.number);
   $("lesson-heading").textContent = `Lezione ${lesson.number} · ${lesson.title}`;
@@ -311,7 +356,8 @@ function renderTicket(view) {
 
 function renderHints() {
   const hints = current.hints;
-  const man = current.kind === "ticket" ? current.man : current.lesson.man;
+  const man = current.kind === "ticket" ? current.man
+    : current.kind === "generato" ? [`${current.command}(1)`] : current.lesson.man;
   $("hints").innerHTML = hints.slice(0, hintsShown)
     .map((hint, i) => `<p class="hint"><b>Indizio ${i + 1}/${hints.length}.</b> ${withCode(hint)}</p>`)
     .join("");
@@ -584,6 +630,10 @@ function showLink(id, text, href) {
 
 // Dopo un esercizio riuscito: il successivo, o a fine lezione la lezione dopo e il ticket collegato.
 function offerNext() {
+  if (current.kind === "generato") {
+    showLink("next", "Genera un altro esercizio →", "#/genera");
+    return;
+  }
   if (current.kind === "ticket") {
     const next = tickets.find((t) => t.number === current.number + 1);
     if (next) showLink("next", `Ticket successivo (${next.number}) →`, `#/challenge/${next.number}`);
@@ -604,15 +654,18 @@ function offerNext() {
 async function check() {
   $("check").disabled = true;
   try {
-    const isExercise = current.kind === "esercizio";
-    const body = isExercise && current.type === "risposta" ? { answer: $("answer").value } : {};
+    const isExercise = current.kind === "esercizio" || current.kind === "generato";
+    const withAnswer = current.kind === "generato" || (isExercise && current.type === "risposta");
+    const body = withAnswer ? { answer: $("answer").value } : {};
     const result = await api("/api/check", "POST", body);
     $("verdict-status").className = `verdict ${result.passed ? "pass" : "fail"}`;
     $("verdict-status").textContent = result.passed ? `PASS: ${isExercise ? "corretto" : "riparato"}` : "FAIL: non ancora";
     $("verdict-output").textContent = result.output;
     $("verdict").hidden = false;
     if (result.passed) {
-      if (isExercise) {
+      if (current.kind === "generato") {
+        markDone("generated", current.id);
+      } else if (isExercise) {
         markDone("exercises", current.key);
         renderStepper(lessons.find((l) => l.number === current.lesson.number), current.key);
       } else {
@@ -626,6 +679,143 @@ async function check() {
     showError(error.message);
   } finally {
     $("check").disabled = false;
+  }
+}
+
+// --- Genera: un esercizio nuovo su un comando. La generazione gira sul server (minuti, con il modello
+// locale): la pagina ne segue ricerche e tentativi, come per il fixer.
+
+const GEN_POLL_MS = 2000;
+let genTimer = null;
+let generating = false;
+
+function showGenerate() {
+  $("map-page").hidden = true;
+  $("work-page").hidden = true;
+  $("gen-page").hidden = false;
+  $("gen-llm-slot").append($("llm")); // lo stesso riquadro dei ticket: Genera usa lo stesso modello
+  $("llm").hidden = false;
+  loadLlm();
+  loadGenerated();
+  loadGeneration();
+}
+
+function generatedBox(view) {
+  const done = isDone("generated", view.id);
+  return `<div class="node">
+    <a class="box${done ? " complete" : ""}" href="#/genera/${attr(view.id)}">
+      <span class="box-number">${escape(view.command)}${done ? " · risolto" : ""}</span>
+      <span class="box-title">${escape(view.title)}</span>
+      <span class="box-source">${escape(view.source.guide)} §${escape(view.source.section)}</span>
+    </a></div>`;
+}
+
+async function loadGenerated() {
+  try {
+    const data = await api("/api/generati");
+    $("gen-guide").hidden = !data.guide.missing;
+    $("gen-guide").textContent = data.guide.missing || "";
+    $("gen-send").disabled = Boolean(data.guide.missing) || generating;
+    $("gen-empty").hidden = data.exercises.length > 0;
+    $("gen-exercises").innerHTML = data.exercises.map(generatedBox).join("");
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+function searchLine(search) {
+  const who = search.by === "codice" ? "Ricerca con la tua richiesta" : "L'AI ha cercato";
+  const found = search.results.length
+    ? search.results.map((r) => `§${escape(r.id)} ${escape(r.title)}`).join(" · ") : "nessun passaggio";
+  return `<p class="gen-search"><b>${who}:</b> <code>${escape(search.query)}</code><br>` +
+    `<span class="muted">${found}</span></p>`;
+}
+
+function attemptLine(attempt) {
+  const where = attempt.ok ? "valido: le due soluzioni coincidono in tutti e tre i giri"
+    : attempt.tried_in_sandbox ? "scartato dalla sandbox" : "scartato prima della sandbox";
+  return `<li><span class="step-tag ${attempt.ok ? "ok" : "error"}">${attempt.ok ? "OK" : "KO"}</span> ` +
+    `Tentativo ${attempt.number}: ${where}</li>`;
+}
+
+function attemptDetails(run) {
+  const attempts = run.attempts.map((a) => `<p class="small"><b>Tentativo ${a.number}</b></p>` +
+    (a.problems.length ? `<pre>${escape(a.problems.join("\n"))}</pre>`
+      : `<pre>Risposte nei tre giri: ${escape(a.answers.join(", "))}</pre>`)).join("");
+  const audit = run.audit ? `<p class="muted small">Registro completo: .breakfix/audit/${escape(run.audit)}</p>` : "";
+  return attempts + audit;
+}
+
+const GENERATION_STATUS = {
+  running: (run) => run.attempts.length
+    ? `Tentativo ${run.attempts.length} di ${run.attempts_max} fatto, l'AI continua… (modello ${run.model})`
+    : `L'AI legge la guida e scrive l'esercizio… (modello ${run.model})`,
+  done: () => "Esercizio pronto: la sandbox l'ha validato.",
+  failed: (run) => `Nessun esercizio: nessuno dei ${run.attempts.length} tentativi ha superato la sandbox. ` +
+    "Riprova, magari con una richiesta più precisa.",
+  error: (run) => `L'AI non è arrivata in fondo: ${run.error}`,
+};
+
+function renderGeneration(run) {
+  generating = run?.status === "running";
+  $("gen-send").disabled = generating;
+  $("gen-send").textContent = generating ? "L'AI sta lavorando…" : "Genera l'esercizio";
+  $("gen-run").hidden = !run;
+  if (!run) return;
+  $("gen-run-status").className = `gen-status ${run.status}`;
+  $("gen-run-status").textContent = GENERATION_STATUS[run.status](run);
+  $("gen-searches").innerHTML = `<p class="muted small">Richiesta: «${escape(run.request)}»</p>` +
+    run.searches.map(searchLine).join("");
+  $("gen-attempts").innerHTML = run.attempts.map(attemptLine).join("");
+  $("gen-details").hidden = !run.attempts.length;
+  $("gen-details-body").innerHTML = attemptDetails(run);
+  const exercise = run.exercise;
+  $("gen-result").hidden = !exercise;
+  $("gen-result").innerHTML = exercise
+    ? `<p class="verdict pass">${escape(exercise.title)}</p>` +
+      `<a class="button" href="#/genera/${attr(exercise.id)}">Fai l'esercizio →</a>` : "";
+}
+
+function pollGeneration() {
+  clearTimeout(genTimer);
+  genTimer = setTimeout(async () => {
+    try {
+      const run = await api("/api/genera");
+      renderGeneration(run);
+      if (run?.status === "running") return pollGeneration();
+      genTimer = null;
+      current = null; // la sandbox è stata ricreata sana: non c'è più niente di attivo
+      if (!$("gen-page").hidden) loadGenerated();
+    } catch (error) {
+      showError(error.message);
+      pollGeneration();
+    }
+  }, GEN_POLL_MS);
+}
+
+async function loadGeneration() {
+  try {
+    const run = await api("/api/genera");
+    renderGeneration(run);
+    if (run?.status === "running" && !genTimer) pollGeneration();
+  } catch {
+    renderGeneration(null);
+  }
+}
+
+async function requestExercise(event) {
+  event.preventDefault();
+  const request = $("gen-request").value.trim();
+  if (!request) return;
+  showError("");
+  $("gen-send").disabled = true;
+  try {
+    renderGeneration(await api("/api/genera", "POST", { request }));
+    current = null;
+    pollGeneration();
+  } catch (error) {
+    showError(error.message);
+    $("gen-send").disabled = false;
   }
 }
 
@@ -688,9 +878,10 @@ function setTab(name) {
 
 function route() {
   const [part, number, step] = location.hash.replace(/^#\/?/, "").split("/");
-  const kind = part === "challenge" ? "challenge" : "basi";
+  const kind = ["challenge", "genera"].includes(part) ? part : "basi";
   setTab(kind);
   showError("");
+  if (kind === "genera") return number ? openGenerated(number) : showGenerate();
   if (!number) return showMap(kind);
   return kind === "basi" ? openLesson(Number(number), step) : openTicket(Number(number));
 }
@@ -707,6 +898,10 @@ $("next-hint").onclick = () => {
 };
 $("reconnect").onclick = connect;
 $("tutor-form").onsubmit = askTutor;
+$("gen-form").onsubmit = requestExercise;
+$("gen-request").onkeydown = (event) => {
+  if (event.key === "Enter" && !event.shiftKey) $("gen-form").requestSubmit();
+};
 $("fixer-start").onclick = startFixer;
 $("llm-form").onsubmit = chooseLlm;
 $("llm-provider").onchange = changeProvider;

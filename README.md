@@ -52,6 +52,7 @@ Se avevi già avviato Compose prima di creare il file `.env`, esegui nuovamente
 - [Come funziona l'interfaccia](#interfaccia-web)
 - [Architettura e file principali](#architettura)
 - [Lezioni ed esercizi](#basi)
+- [Genera: esercizi su un comando scritti dall'AI (RAG)](#genera)
 - [Scenari](#scenari) — contiene spoiler sulle cause dei problemi
 - [Sicurezza e limiti](#sicurezza)
 - [AI Act: classe di rischio, dati, cosa è verificato](#ai-act)
@@ -83,6 +84,13 @@ ma due passi su tre non hanno bisogno di un modello: applicare la rottura e vali
 solo compito da LLM, scrivere: quindi un agente con un tool, `prova_scenario`, che gli restituisce il
 verdetto della sandbox finché lo scenario non è valido. Chi scrive non è chi giudica: il check delle
 bozze è quello comune (`baseline`), non lo scrive l'author. Vedi [Bozze generate](#bozze-generate).
+
+**Il generatore è un quarto agente singolo, con due tool e il RAG.** Nella sezione *Genera* si chiede
+un comando ("insegnami awk"): il codice cerca nella *Debian Reference* (BM25) i passaggi che ne parlano,
+l'agente può cercarne altri (`cerca_nella_guida`) e scrive l'esercizio (`prova_esercizio`). Il modello
+decide le due cose aperte, con quali parole cercare e come insegnare il comando; ricerca, controllo e
+verdetto sono codice. Il controllo non lo scrive il modello: le due soluzioni che scrive (una con il
+comando, una senza) devono coincidere su tre preparazioni a caso. Vedi [Genera](#genera).
 
 ```text
   manuale di un comando ─► Author agent ── prova_scenario ──► validate (sana, rotta, riparata)
@@ -162,6 +170,10 @@ un'esecuzione non influenza la successiva.
 | Basi: lezioni ed esercizi (CLI `lessons`, `learn`) | [src/breakfix/lessons.py](src/breakfix/lessons.py), [lessons/](lessons/) |
 | Eval del fixer sugli scenari | [src/breakfix/evaluate.py](src/breakfix/evaluate.py) |
 | UI dell'esercizio (FastAPI + xterm.js): ticket, terminale vero, indizi, check | [src/breakfix/web.py](src/breakfix/web.py), [src/breakfix/static/](src/breakfix/static/) |
+| Genera: ricerca BM25 nella Debian Reference (RAG) | [src/breakfix/guide.py](src/breakfix/guide.py) |
+| Genera: agente generatore, validazione con due soluzioni, CLI `breakfix-genera` | [src/breakfix/generator.py](src/breakfix/generator.py) |
+| Genera: tutor sugli esercizi generati, guardrail ricavato dalla soluzione | [src/breakfix/lesson_tutor.py](src/breakfix/lesson_tutor.py) |
+| Test di Genera: ricerca e recall@5, controlli, validazione, API, guardrail (senza Docker né modello) | [tests/test_guide.py](tests/test_guide.py), [tests/test_generator.py](tests/test_generator.py), [tests/test_lesson_tutor.py](tests/test_lesson_tutor.py), [tests/test_web.py](tests/test_web.py) |
 | Immagine della sandbox: l'app da rompere (+ log con prompt injection) | [sandbox/Dockerfile](sandbox/Dockerfile), [sandbox/app/](sandbox/app/), [sandbox/app.log](sandbox/app.log) |
 | L'app in container, con le sandbox in un Docker privato | [Dockerfile](Dockerfile), [compose.yaml](compose.yaml), [docker/entrypoint.sh](docker/entrypoint.sh) |
 | Agente fixer di riferimento (multi-provider, memory persistente) | [src/breakfix/agent.py](src/breakfix/agent.py) |
@@ -250,7 +262,11 @@ breakfix-author new chown              # parte da `chown --help` letto nella san
 breakfix-author list
 breakfix-author validate               # rivalida le bozze, senza modello
 breakfix-author start data-dir-root-owned   # per provarla: poi `breakfix-sandbox shell` e `breakfix-author check`
-# Solo da CLI: nella UI la generazione non c'è (vedi Bozze generate)
+# Solo da CLI: nella UI la generazione di scenari non c'è (vedi Bozze generate)
+
+# 9. Genera: un esercizio su un comando, dalla Debian Reference (anche dalla UI, sezione Genera)
+breakfix-genera cerca "awk campi colonne"      # solo la ricerca: i passaggi che riceverebbe l'agente
+breakfix-genera nuovo "insegnami a sommare una colonna con awk"
 
 breakfix-sandbox down
 ```
@@ -261,6 +277,10 @@ breakfix-sandbox down
   (verde se superato). Aprendo una lezione parte il primo esercizio non ancora superato; un selettore a
   trattini passa da un esercizio all'altro (1.1, 1.2, …) e ognuno riparte da una sandbox nuova. Sopra
   l'esercizio c'è la spiegazione della lezione, con i comandi da provare con un clic;
+- **Genera**: si scrive il comando che si vuole imparare e l'AI scrive un esercizio nuovo, provato nella
+  sandbox prima di comparire (la pagina segue ricerche e tentativi dal vivo). Si risolve come un esercizio
+  delle Basi, con la spiegazione scritta dall'AI, il passaggio della guida da cui nasce e *Chiedi al
+  tutor*. Vedi [Genera](#genera);
 - **Challenge**: i ticket come box, raggruppate e colorate per difficoltà (verde, giallo, rosso, sempre
   con la scritta), con le lezioni che preparano. Sono sempre aperte, anche senza aver fatto le lezioni.
   La pagina del ticket mostra il ticket, *Come orientarsi* (i primi comandi: un clic li esegue nel
@@ -417,6 +437,8 @@ sandbox), quindi le serve un Docker. Le strade sono due:
 | `BREAKFIX_AUDIT_DIR` | `.breakfix/audit` | dove salvare l'audit trail |
 | `BREAKFIX_MAX_STEPS` | `20` | passi massimi del fixer (chiamate al modello) prima di fermarsi |
 | `BREAKFIX_DRAFTS_DIR` | `.breakfix/drafts` | dove `breakfix-author` salva le bozze di scenario |
+| `BREAKFIX_GENERATED_DIR` | `.breakfix/generati` | dove Genera salva gli esercizi validati |
+| `BREAKFIX_GUIDE` | il pacchetto `debian-reference-it`, poi `.breakfix/guida/` | il testo della Debian Reference (`debian-reference.it.txt.gz`) |
 | `BREAKFIX_UI_HOST` | `127.0.0.1` (`0.0.0.0` nel container) | indirizzo su cui ascolta la UI |
 | `JUDGE_PROVIDER` / `JUDGE_MODEL` | quelli del tutor | il giudice di `breakfix-tutor-eval`: meglio un modello più forte |
 
@@ -465,6 +487,65 @@ Una lezione è una cartella `lessons/<numero>-<nome>/` con:
 
 Come nei ticket si verifica il risultato, mai i comandi digitati: un test controlla che né il testo né
 gli indizi contengano la soluzione.
+
+## Genera
+
+Le Basi insegnano i comandi che servono ai ticket, e solo quelli: `awk`, `sed`, `cut` e `sort`, per
+esempio, non ci sono. **Genera** scrive un esercizio nuovo sul comando che si chiede
+([generator.py](src/breakfix/generator.py)): una spiegazione, dei file con dati a caso in
+`/srv/esercizi` e una domanda a cui si risponde usando il comando, come gli esercizi *risposta* delle
+Basi. Poi si risolve con il terminale, *Verifica* e il tutor.
+
+**La fonte (RAG).** La *Debian Reference* di Osamu Aoki: libera (GPL-2+), in italiano, e un pacchetto
+Debian (`debian-reference-it`) della stessa versione della sandbox (bookworm), quindi i comandi che
+descrive sono quelli del terminale. Il testo non è nel repository: l'immagine dell'app installa il
+pacchetto. È una guida di amministrazione che spiega cosa fanno i comandi, cioè proprio quello che serve
+a un esercizio su un comando. La ricerca è BM25 ([guide.py](src/breakfix/guide.py)), non embedding: gira
+senza rete e senza un modello in più (il server vLLM non serve embedding) e dà sempre lo stesso
+risultato, così si testa. 430 sezioni (815 passaggi), indicizzate in meno di un secondo. Il limite di una
+ricerca per parole sono i sinonimi che la guida non usa: per questo l'agente ha il tool di ricerca e
+sceglie lui le parole. L'esercizio deve citare un passaggio che l'agente ha davvero ricevuto, e la
+pagina lo mostra sotto la spiegazione.
+
+**La validazione.** Il controllo (`check.sh`) lo scrive il programma: ricalcola la risposta con la
+soluzione di riferimento al momento della Verifica e la confronta con quella scritta. La soluzione però
+la scrive il modello, quindi non ci si fida di una sola: ne scrive due, una con il comando richiesto e
+una senza. Prima dei controlli nella sandbox, il codice verifica che la prima usi davvero il comando e la
+seconda no, che entrambe leggano soltanto, che la preparazione usi dati a caso e passi il guardrail. Poi,
+su tre preparazioni diverse:
+
+1. la preparazione gira e le due soluzioni danno la stessa risposta, non vuota;
+2. la soluzione rilanciata ridà la stessa risposta;
+3. una risposta sbagliata non passa il controllo, quella giusta sì;
+4. la risposta non è scritta nel testo;
+
+e la risposta deve cambiare da un giro all'altro. Due calcoli indipendenti che coincidono su dati
+diversi sono una prova; la parola del modello no.
+
+**Il tutor sugli esercizi generati** è lo stesso agente dei ticket ([lesson_tutor.py](src/breakfix/lesson_tutor.py)),
+con la spiegazione dell'esercizio e la soluzione (segreta). Il guardrail di output non ha regole scritte
+a mano: si ricava dalla soluzione. Blocca la risposta giusta, calcolata nella sandbox al momento della
+domanda, e i comandi della soluzione con i loro argomenti (`awk -F,`), tranne quelli che il testo o gli
+indizi dicono già. Il meccanismo è provato anche sui 39 esercizi delle Basi, che hanno tutti una
+soluzione: lì il tutor non c'è, perché spiegazione e indizi sono scritti a mano.
+
+**Cosa è verificato.**
+
+| Cosa | Come | Esito |
+| --- | --- | --- |
+| La ricerca trova la sezione giusta | recall@5 su 6 richieste ([test_guide.py](tests/test_guide.py)), gira nel build | 6/6. Le richieste le ho scritte dopo aver visto i risultati: è un controllo di regressione, non un eval cieco |
+| La validazione accetta un esercizio giusto | un esercizio awk scritto a mano (somma di una colonna) sulla sandbox vera | valido, risposte 170, 44, 155 nei tre giri; il controllo accetta la risposta con spazi in più e rifiuta quella sbagliata |
+| La validazione scarta due soluzioni discordi | lo stesso esercizio con una seconda soluzione sbagliata | scartato al primo giro: "solution_sh dice 87, alternative_sh 11" |
+| Controlli prima della sandbox, fonte, agente, API | [test_generator.py](tests/test_generator.py), [test_web.py](tests/test_web.py), senza Docker né modello | test verdi |
+| Quante volte riesce con un modello vero | N richieste, esercizi validi / scartati | **da fare** |
+
+**Limiti noti.** La validazione dice che la risposta è coerente con i dati, non che sia quella che il
+testo chiede: due soluzioni possono calcolare la stessa cosa sbagliata. Non dice nemmeno che la
+spiegazione sia corretta: lo direbbe un giudice LLM calibrato, come quello del tutor, o una persona.
+Funziona per i comandi che leggono e cercano (awk, sed, cut, sort, grep, find, wc); un comando che
+cambia il sistema chiederebbe un controllo diverso per ogni esercizio, che il modello dovrebbe scrivere.
+La generazione occupa la sandbox per minuti. Nella sandbox non ci sono pacchetti oltre a quelli
+dell'immagine (c'è `mawk`, non `gawk`).
 
 ## Scenari
 
@@ -806,6 +887,8 @@ Dove il design è stato sfidato e cosa è cambiato dopo. Il coding agent usato �
 - [x] Author (`breakfix-author`): bozze di scenario dal manuale di un comando, validate dalla sandbox. Un agente con un tool al posto della DagPipeline Author→Breaker→Validator: rompere e validare non richiedono un modello
 - [x] Generazione provata anche nella UI (sezione "Generate dall'AI") e poi tolta: 2 scenari nuovi su 9 esecuzioni. Resta da CLI, con controlli sulle copie (stesso comando sullo stesso file, riparazione già esistente, ticket che nomina il file)
 - [ ] **Next step: challenge generate da guasti reali.** Serve (1) una fonte di problemi veri, per esempio un libro di troubleshooting o dei postmortem, da cui recuperare il caso con RAG al posto del `--help`; (2) una sandbox più ricca, con più servizi, altrimenti lo spazio dei guasti resta quello di oggi; (3) un giudice LLM per novità e qualità del ticket, che i controlli sui comandi non vedono; (4) un eval dell'author, con il tasso di riuscita su N esecuzioni, come per fixer e tutor. Solo dopo ha senso riportarla nella UI
+- [x] Genera: esercizi su un comando da una richiesta, con RAG (BM25) sulla Debian Reference, validati con due soluzioni indipendenti su tre preparazioni a caso; tutor con guardrail ricavato dalla soluzione
+- [ ] Eval di Genera con un modello vero (quante richieste danno un esercizio valido) e giudice LLM per la spiegazione
 - [ ] Extra: indizi e regole anti-spoiler generati, eval in CI
 
 ## Note e difficoltà
