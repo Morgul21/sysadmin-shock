@@ -1,0 +1,91 @@
+# Eval dell'Oracolo: `breakfix-oracolo eval`.
+#
+# I file di /srv/oracolo li scriviamo noi (oracolo/genera_dati.py, seme fisso), quindi le risposte giuste
+# sono note. Un caso passa se almeno uno dei comandi proposti, eseguito nella sandbox, dà la risposta:
+# lo decide l'output, non un giudice. `breakfix-oracolo verifica` controlla gli `expected` con `reference`.
+#
+# match = "uguale": l'output è esattamente la risposta (es. un numero);
+# match = "riga": l'output è una riga sola che contiene la risposta (es. "  9 Firenze").
+# Le domande sono scritte come le farebbe chi si esercita, con abbastanza precisione da avere una risposta sola.
+
+[[case]]
+id = "log-errori"
+question = "Quante righe di livello ERROR ci sono in /srv/oracolo/app.log?"
+expected = "25"
+reference = "grep -c ' ERROR ' /srv/oracolo/app.log"
+
+[[case]]
+id = "log-errori-db"
+question = "Quanti errori (ERROR) del componente db ci sono in app.log?"
+expected = "15"
+reference = "grep -c 'ERROR \\[db\\]' /srv/oracolo/app.log"
+
+[[case]]
+id = "log-primo-errore"
+question = "Fammi vedere solo il primo errore (ERROR) di app.log"
+expected = "07:59:20"
+match = "riga"
+reference = "grep -m 1 ' ERROR ' /srv/oracolo/app.log"
+
+[[case]]
+id = "log-warn"
+question = "Conta gli avvisi di livello WARN nel log dell'applicazione"
+expected = "44"
+reference = "grep -c ' WARN ' /srv/oracolo/app.log"
+
+[[case]]
+id = "dipendenti-it"
+question = "Quanti dipendenti lavorano nel reparto IT secondo dipendenti.csv?"
+expected = "8"
+reference = "awk -F, '$3 == \"IT\"' /srv/oracolo/dipendenti.csv | wc -l"
+
+[[case]]
+id = "dipendenti-dal-2020"
+question = "Quanti dipendenti sono stati assunti dal 2020 in poi?"
+expected = "12"
+reference = "awk -F, 'NR > 1 && $4 >= 2020' /srv/oracolo/dipendenti.csv | wc -l"
+
+[[case]]
+id = "dipendenti-citta"
+question = "In quale città lavorano più dipendenti? Voglio una riga sola con la città"
+expected = "Firenze"
+match = "riga"
+reference = "tail -n +2 /srv/oracolo/dipendenti.csv | cut -d, -f5 | sort | uniq -c | sort -nr | head -n 1"
+
+[[case]]
+id = "kernel-io"
+question = "Quante righe di kern.log contengono 'I/O error'?"
+expected = "21"
+reference = "grep -c 'I/O error' /srv/oracolo/kern.log"
+
+[[case]]
+id = "kernel-sola-lettura"
+question = "Quale file system il kernel ha rimontato in sola lettura?"
+expected = "sdb1"
+match = "riga"
+reference = "grep 'read-only' /srv/oracolo/kern.log"
+
+[[case]]
+id = "kernel-oom"
+question = "Quante volte l'OOM killer ha ucciso un processo secondo kern.log?"
+expected = "3"
+reference = "grep -c 'Out of memory' /srv/oracolo/kern.log"
+
+[[case]]
+id = "disco-cartella-grande"
+question = "Qual è la cartella che occupa più spazio dentro /srv/oracolo/archivio? Una riga sola"
+expected = "backup"
+match = "riga"
+reference = "du -s /srv/oracolo/archivio/* | sort -n | tail -n 1"
+
+[[case]]
+id = "disco-file-grandi"
+question = "Quanti file nell'archivio sono più grandi di 1 MB?"
+expected = "6"
+reference = "find /srv/oracolo/archivio -type f -size +1M | wc -l"
+
+[[case]]
+id = "disco-file-vecchi"
+question = "Quanti file dell'archivio sono stati modificati prima del 1 agosto 2026?"
+expected = "9"
+reference = "find /srv/oracolo/archivio -type f ! -newermt 2026-08-01 | wc -l"

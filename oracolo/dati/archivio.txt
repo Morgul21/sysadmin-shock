@@ -1,0 +1,25 @@
+# percorso dimensione_kb data_modifica
+archivio/backup/backup-20260627-1.tar.gz 3657 2026-06-27
+archivio/backup/backup-20260724-2.tar.gz 6448 2026-07-24
+archivio/backup/backup-20260920-3.tar.gz 6944 2026-09-20
+archivio/backup/backup-20260702-4.tar.gz 5617 2026-07-02
+archivio/backup/backup-20260611-5.tar.gz 2022 2026-06-11
+archivio/backup/backup-20260908-6.tar.gz 2250 2026-09-08
+archivio/export/export-20260601-1.csv 133 2026-06-01
+archivio/export/export-20260814-2.csv 133 2026-08-14
+archivio/export/export-20260909-3.csv 349 2026-09-09
+archivio/export/export-20260903-4.csv 879 2026-09-03
+archivio/export/export-20261004-5.csv 324 2026-10-04
+archivio/export/export-20260805-6.csv 804 2026-08-05
+archivio/log-vecchi/log-vecchi-20260607-1.log.gz 337 2026-06-07
+archivio/log-vecchi/log-vecchi-20260614-2.log.gz 162 2026-06-14
+archivio/log-vecchi/log-vecchi-20260624-3.log.gz 70 2026-06-24
+archivio/log-vecchi/log-vecchi-20260612-4.log.gz 184 2026-06-12
+archivio/tmp/tmp-20260802-1.tmp 22 2026-08-02
+archivio/tmp/tmp-20261001-2.tmp 43 2026-10-01
+archivio/tmp/tmp-20261103-3.tmp 59 2026-11-03
+archivio/tmp/tmp-20261027-4.tmp 51 2026-10-27
+archivio/tmp/tmp-20261008-5.tmp 33 2026-10-08
+archivio/tmp/tmp-20260801-6.tmp 49 2026-08-01
+archivio/tmp/tmp-20260909-7.tmp 54 2026-09-09
+archivio/tmp/tmp-20261009-8.tmp 21 2026-10-09

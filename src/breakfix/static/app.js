@@ -1,7 +1,7 @@
 // La pagina: le mappe delle basi e delle challenge (box collegate), e la pagina di lavoro con il
 // terminale. Gli indirizzi stanno nel frammento: #/basi, #/basi/5/2 (lezione 5, esercizio 2),
-// #/challenge, #/challenge/3, #/genera, #/genera/<id> (un esercizio generato). Ricaricando si resta dove
-// si era, e la sandbox riparte solo se l'esercizio o il ticket chiesto non è già quello attivo.
+// #/challenge, #/challenge/3, #/oracolo. Ricaricando si resta dove si era, e la sandbox riparte solo se
+// l'esercizio o il ticket chiesto non è già quello attivo.
 
 // Il metodo di un sistemista, uguale per tutti i ticket: non dice la causa, dice da dove partire.
 const FIRST_STEPS = [
@@ -50,9 +50,9 @@ const PROGRESS_KEY = "breakfix.progress";
 function loadProgress() {
   try {
     const saved = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {};
-    return { exercises: saved.exercises || [], tickets: saved.tickets || [], generated: saved.generated || [] };
+    return { exercises: saved.exercises || [], tickets: saved.tickets || [] };
   } catch {
-    return { exercises: [], tickets: [], generated: [] };
+    return { exercises: [], tickets: [] };
   }
 }
 
@@ -126,7 +126,7 @@ function markdown(text) {
 }
 
 function showError(message) {
-  for (const id of ["error", "map-error", "gen-error"]) {
+  for (const id of ["error", "map-error"]) {
     $(id).textContent = message;
     $(id).hidden = !message;
   }
@@ -172,7 +172,6 @@ function section(title, boxes, className = "") {
 
 function showMap(kind) {
   $("work-page").hidden = true;
-  $("gen-page").hidden = true;
   $("map-page").hidden = false;
   $("map-intro").textContent = INTRO[kind];
   $("map").innerHTML = kind === "basi"
@@ -186,7 +185,6 @@ function showMap(kind) {
 
 function showWork() {
   $("map-page").hidden = true;
-  $("gen-page").hidden = true;
   $("work-page").hidden = false;
   requestAnimationFrame(() => fit.fit()); // il terminale era nascosto: va ridimensionato ora
 }
@@ -233,20 +231,9 @@ async function openTicket(number) {
   await start(`/api/start/${number}`);
 }
 
-async function openGenerated(id) {
-  setBack("genera");
-  if (current?.kind === "generato" && current.id === id) {
-    render(current);
-    return;
-  }
-  await start(`/api/generati/${encodeURIComponent(id)}/start`);
-}
-
-const BACK = { basi: "← Basi", challenge: "← Challenge", genera: "← Genera" };
-
 function setBack(kind) {
   $("back").href = `#/${kind}`;
-  $("back").textContent = BACK[kind];
+  $("back").textContent = kind === "basi" ? "← Basi" : "← Challenge";
 }
 
 function render(view) {
@@ -255,23 +242,20 @@ function render(view) {
   $("verdict").hidden = true;
   $("next").hidden = true;
   $("next-ticket").hidden = true;
+  // L'Oracolo usa la stessa pagina con il terminale, ma niente indizi, verifica, tutor o fixer.
+  const isOracle = view.kind === "oracolo";
+  for (const id of ["hints", "next-hint", "actions", "back"]) $(id).hidden = isOracle;
+  $("oracle-view").hidden = !isOracle;
+  if (isOracle) return renderOracle(view);
   const isTicket = view.kind === "ticket";
-  const isGenerated = view.kind === "generato";
   $("exercise-view").hidden = isTicket;
   $("ticket-view").hidden = !isTicket;
   if (isTicket) renderTicket(view);
-  else if (isGenerated) renderGenerated(view);
   else renderExercise(view);
   renderHints();
-  // Il tutor c'è nei ticket e negli esercizi generati; nelle Basi ci sono spiegazione e indizi scritti a mano.
-  const withTutor = isTicket || isGenerated;
-  $("tutor").hidden = !withTutor;
-  $("tutor").before($("llm")); // in Genera il riquadro sta nella sua pagina: torna qui
-  $("llm").hidden = !withTutor;
-  $("tutor-question").placeholder = isTicket
-    ? "Es. run.sh ha la x per tutti eppure dice Permission denied"
-    : `Es. come si sceglie il separatore dei campi in ${view.command || "questo comando"}?`;
-  if (withTutor) {
+  $("tutor").hidden = !isTicket;
+  $("llm").hidden = !isTicket;
+  if (isTicket) {
     loadTutor();
     loadLlm();
   }
@@ -280,37 +264,13 @@ function render(view) {
   showFixer();
   $("work").hidden = false;
   // L'indirizzo segue quello che è attivo (es. il primo esercizio scelto in automatico).
-  const hash = isTicket ? `#/challenge/${view.number}`
-    : isGenerated ? `#/genera/${view.id}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
+  const hash = isTicket ? `#/challenge/${view.number}` : `#/basi/${view.lesson.number}/${view.key.split(".")[1]}`;
   if (location.hash !== hash) history.replaceState(null, "", hash);
-  setTab(isTicket ? "challenge" : isGenerated ? "genera" : "basi");
+  setTab(isTicket ? "challenge" : "basi");
   showWork();
 }
 
-// Un esercizio generato nella stessa vista degli esercizi delle Basi: la spiegazione è quella scritta
-// dall'AI, sotto c'è il passaggio della guida da cui nasce.
-function renderGenerated(view) {
-  const s = view.source;
-  $("lesson-heading").textContent = `Esercizio generato · ${view.command}`;
-  $("lesson-meta").textContent = `Dalla ${s.guide} §${s.section} (${s.license}) · richiesta: «${s.request}» · ` +
-    "validato nella sandbox, non rivisto da una persona";
-  $("lesson-explanation-title").textContent = "Spiegazione (scritta dall'AI)";
-  $("lesson-text").innerHTML = markdown(view.explanation);
-  $("lesson-explanation").open = !isDone("generated", view.id);
-  $("gen-source").hidden = false;
-  $("gen-source").querySelector("summary").textContent = `Il passaggio della guida: §${s.section} ${s.title}`;
-  $("gen-source-text").textContent = s.text;
-  $("stepper").innerHTML = "";
-  $("exercise-number").textContent = "Esercizio generato · trova la risposta sul sistema";
-  $("exercise-title").textContent = view.title;
-  $("exercise-task").innerHTML = markdown(view.task);
-  $("answer-row").hidden = false;
-  $("answer").value = "";
-}
-
 function renderExercise(view) {
-  $("lesson-explanation-title").textContent = "Spiegazione della lezione";
-  $("gen-source").hidden = true;
   const lesson = view.lesson;
   const entry = lessons.find((l) => l.number === lesson.number);
   $("lesson-heading").textContent = `Lezione ${lesson.number} · ${lesson.title}`;
@@ -356,8 +316,7 @@ function renderTicket(view) {
 
 function renderHints() {
   const hints = current.hints;
-  const man = current.kind === "ticket" ? current.man
-    : current.kind === "generato" ? [`${current.command}(1)`] : current.lesson.man;
+  const man = current.kind === "ticket" ? current.man : current.lesson.man;
   $("hints").innerHTML = hints.slice(0, hintsShown)
     .map((hint, i) => `<p class="hint"><b>Indizio ${i + 1}/${hints.length}.</b> ${withCode(hint)}</p>`)
     .join("");
@@ -630,10 +589,6 @@ function showLink(id, text, href) {
 
 // Dopo un esercizio riuscito: il successivo, o a fine lezione la lezione dopo e il ticket collegato.
 function offerNext() {
-  if (current.kind === "generato") {
-    showLink("next", "Genera un altro esercizio →", "#/genera");
-    return;
-  }
   if (current.kind === "ticket") {
     const next = tickets.find((t) => t.number === current.number + 1);
     if (next) showLink("next", `Ticket successivo (${next.number}) →`, `#/challenge/${next.number}`);
@@ -654,18 +609,15 @@ function offerNext() {
 async function check() {
   $("check").disabled = true;
   try {
-    const isExercise = current.kind === "esercizio" || current.kind === "generato";
-    const withAnswer = current.kind === "generato" || (isExercise && current.type === "risposta");
-    const body = withAnswer ? { answer: $("answer").value } : {};
+    const isExercise = current.kind === "esercizio";
+    const body = isExercise && current.type === "risposta" ? { answer: $("answer").value } : {};
     const result = await api("/api/check", "POST", body);
     $("verdict-status").className = `verdict ${result.passed ? "pass" : "fail"}`;
     $("verdict-status").textContent = result.passed ? `PASS: ${isExercise ? "corretto" : "riparato"}` : "FAIL: non ancora";
     $("verdict-output").textContent = result.output;
     $("verdict").hidden = false;
     if (result.passed) {
-      if (current.kind === "generato") {
-        markDone("generated", current.id);
-      } else if (isExercise) {
+      if (isExercise) {
         markDone("exercises", current.key);
         renderStepper(lessons.find((l) => l.number === current.lesson.number), current.key);
       } else {
@@ -682,140 +634,88 @@ async function check() {
   }
 }
 
-// --- Genera: un esercizio nuovo su un comando. La generazione gira sul server (minuti, con il modello
-// locale): la pagina ne segue ricerche e tentativi, come per il fixer.
+// --- Oracolo: "come faccio a...?" sui file di /srv/oracolo. Il server cerca nella guida, il modello propone
+// i comandi, il server li esegue: la pagina mostra comandi, opzioni, output vero e fonte.
 
-const GEN_POLL_MS = 2000;
-let genTimer = null;
-let generating = false;
+const oracleAnswers = []; // le risposte di questa visita, dalla più recente
 
-function showGenerate() {
-  $("map-page").hidden = true;
-  $("work-page").hidden = true;
-  $("gen-page").hidden = false;
-  $("gen-llm-slot").append($("llm")); // lo stesso riquadro dei ticket: Genera usa lo stesso modello
+async function openOracle() {
+  if (current?.kind === "oracolo") {
+    render(current);
+    return;
+  }
+  await start("/api/oracolo/start");
+}
+
+function renderOracle(view) {
+  $("exercise-view").hidden = true;
+  $("ticket-view").hidden = true;
+  $("tutor").hidden = true;
+  $("fixer").hidden = true;
+  $("man").hidden = true;
   $("llm").hidden = false;
   loadLlm();
-  loadGenerated();
-  loadGeneration();
+  $("oracle-files").innerHTML = view.files.map((f) => {
+    const look = f.path.endsWith("/") ? `du -sh ${f.path}*` : `head -n 5 ${f.path}`;
+    return `<li><code>${escape(f.path)}</code> ${escape(f.description)}` +
+      `<button data-command="${attr(look)}" title="${attr(look)}">guarda</button></li>`;
+  }).join("");
+  $("oracle-answers").innerHTML = oracleAnswers.map(oracleAnswer).join("");
+  $("work").hidden = false;
+  if (location.hash !== "#/oracolo") history.replaceState(null, "", "#/oracolo");
+  setTab("oracolo");
+  showWork();
 }
 
-function generatedBox(view) {
-  const done = isDone("generated", view.id);
-  return `<div class="node">
-    <a class="box${done ? " complete" : ""}" href="#/genera/${attr(view.id)}">
-      <span class="box-number">${escape(view.command)}${done ? " · risolto" : ""}</span>
-      <span class="box-title">${escape(view.title)}</span>
-      <span class="box-source">${escape(view.source.guide)} §${escape(view.source.section)}</span>
-    </a></div>`;
+function oracleCommand(c) {
+  // Lo stato lo decide il codice: scriverebbe (bloccato), manca nella sandbox, uscita ≠ 0, oppure uscita 0 ma
+  // con qualcosa su stderr (in una pipeline l'uscita è quella dell'ultimo comando: `find … | wc -l` dà 0).
+  const state = c.blocked ? "blocked" : c.unavailable ? "unavailable"
+    : c.exit_code !== 0 ? "failed" : c.stderr ? "warned" : "";
+  const tag = c.blocked ? '<span class="step-tag blocked">non eseguito</span>'
+    : c.unavailable ? `<span class="step-tag absent">non c'è nella sandbox</span>`
+    : c.exit_code !== 0 ? `<span class="step-tag error">errore ${c.exit_code}</span>`
+    : c.stderr ? '<span class="step-tag blocked">eseguito, con errori</span>'
+    : '<span class="step-tag ok">eseguito</span>';
+  const options = c.options.length
+    ? `<ul class="oracle-options">${c.options.map((o) =>
+      `<li><code>${escape(o.parte)}</code> ${escape(o.significato)}</li>`).join("")}</ul>` : "";
+  const output = c.blocked || c.unavailable ? `<p class="muted small">${escape(c.blocked || c.unavailable)}</p>`
+    : `<pre>${escape(c.output || "(nessun output)")}</pre>`;
+  return `<div class="oracle-cmd ${state}"><div class="oracle-line"><code>${escape(c.command)}</code>` +
+    `<span>${tag} <button data-command="${attr(c.command)}">Prova nel terminale</button></span></div>` +
+    `<p>${escape(c.explanation)}</p>${options}${output}</div>`;
 }
 
-async function loadGenerated() {
-  try {
-    const data = await api("/api/generati");
-    $("gen-guide").hidden = !data.guide.missing;
-    $("gen-guide").textContent = data.guide.missing || "";
-    $("gen-send").disabled = Boolean(data.guide.missing) || generating;
-    $("gen-empty").hidden = data.exercises.length > 0;
-    $("gen-exercises").innerHTML = data.exercises.map(generatedBox).join("");
-  } catch (error) {
-    showError(error.message);
-  }
+function oracleAnswer(a) {
+  const source = a.source_ok
+    ? `<p class="oracle-source">Fonte: Debian Reference §${escape(a.source)} ${escape(a.source_title)}</p>`
+    : `<p class="oracle-source warn">Fonte citata (§${escape(a.source || "nessuna")}) non tra i passaggi trovati: ` +
+      "la spiegazione non è ancorata alla guida.</p>";
+  const commands = a.commands.length ? a.commands.map(oracleCommand).join("")
+    : '<p class="muted">Nessun comando proposto.</p>';
+  const explanation = a.explanation ? `<p class="oracle-explanation">${escape(a.explanation)}</p>` : "";
+  return `<div class="oracle-answer"><p class="tutor-question">${escape(a.question)}</p>${explanation}${commands}${source}` +
+    (a.note ? `<p class="muted small">${escape(a.note)}</p>` : "") +
+    `<p class="muted small">Modello ${escape(a.model)}, ${a.duration_s} s · registro: .breakfix/audit/${escape(a.audit)}</p></div>`;
 }
 
-function searchLine(search) {
-  const who = search.by === "codice" ? "Ricerca con la tua richiesta" : "L'AI ha cercato";
-  const found = search.results.length
-    ? search.results.map((r) => `§${escape(r.id)} ${escape(r.title)}`).join(" · ") : "nessun passaggio";
-  return `<p class="gen-search"><b>${who}:</b> <code>${escape(search.query)}</code><br>` +
-    `<span class="muted">${found}</span></p>`;
-}
-
-function attemptLine(attempt) {
-  const where = attempt.ok ? "valido: le due soluzioni coincidono in tutti e tre i giri"
-    : attempt.tried_in_sandbox ? "scartato dalla sandbox" : "scartato prima della sandbox";
-  return `<li><span class="step-tag ${attempt.ok ? "ok" : "error"}">${attempt.ok ? "OK" : "KO"}</span> ` +
-    `Tentativo ${attempt.number}: ${where}</li>`;
-}
-
-function attemptDetails(run) {
-  const attempts = run.attempts.map((a) => `<p class="small"><b>Tentativo ${a.number}</b></p>` +
-    (a.problems.length ? `<pre>${escape(a.problems.join("\n"))}</pre>`
-      : `<pre>Risposte nei tre giri: ${escape(a.answers.join(", "))}</pre>`)).join("");
-  const audit = run.audit ? `<p class="muted small">Registro completo: .breakfix/audit/${escape(run.audit)}</p>` : "";
-  return attempts + audit;
-}
-
-const GENERATION_STATUS = {
-  running: (run) => run.attempts.length
-    ? `Tentativo ${run.attempts.length} di ${run.attempts_max} fatto, l'AI continua… (modello ${run.model})`
-    : `L'AI legge la guida e scrive l'esercizio… (modello ${run.model})`,
-  done: () => "Esercizio pronto: la sandbox l'ha validato.",
-  failed: (run) => `Nessun esercizio: nessuno dei ${run.attempts.length} tentativi ha superato la sandbox. ` +
-    "Riprova, magari con una richiesta più precisa.",
-  error: (run) => `L'AI non è arrivata in fondo: ${run.error}`,
-};
-
-function renderGeneration(run) {
-  generating = run?.status === "running";
-  $("gen-send").disabled = generating;
-  $("gen-send").textContent = generating ? "L'AI sta lavorando…" : "Genera l'esercizio";
-  $("gen-run").hidden = !run;
-  if (!run) return;
-  $("gen-run-status").className = `gen-status ${run.status}`;
-  $("gen-run-status").textContent = GENERATION_STATUS[run.status](run);
-  $("gen-searches").innerHTML = `<p class="muted small">Richiesta: «${escape(run.request)}»</p>` +
-    run.searches.map(searchLine).join("");
-  $("gen-attempts").innerHTML = run.attempts.map(attemptLine).join("");
-  $("gen-details").hidden = !run.attempts.length;
-  $("gen-details-body").innerHTML = attemptDetails(run);
-  const exercise = run.exercise;
-  $("gen-result").hidden = !exercise;
-  $("gen-result").innerHTML = exercise
-    ? `<p class="verdict pass">${escape(exercise.title)}</p>` +
-      `<a class="button" href="#/genera/${attr(exercise.id)}">Fai l'esercizio →</a>` : "";
-}
-
-function pollGeneration() {
-  clearTimeout(genTimer);
-  genTimer = setTimeout(async () => {
-    try {
-      const run = await api("/api/genera");
-      renderGeneration(run);
-      if (run?.status === "running") return pollGeneration();
-      genTimer = null;
-      current = null; // la sandbox è stata ricreata sana: non c'è più niente di attivo
-      if (!$("gen-page").hidden) loadGenerated();
-    } catch (error) {
-      showError(error.message);
-      pollGeneration();
-    }
-  }, GEN_POLL_MS);
-}
-
-async function loadGeneration() {
-  try {
-    const run = await api("/api/genera");
-    renderGeneration(run);
-    if (run?.status === "running" && !genTimer) pollGeneration();
-  } catch {
-    renderGeneration(null);
-  }
-}
-
-async function requestExercise(event) {
+async function askOracle(event) {
   event.preventDefault();
-  const request = $("gen-request").value.trim();
-  if (!request) return;
+  const question = $("oracle-question").value.trim();
+  if (!question) return;
   showError("");
-  $("gen-send").disabled = true;
+  $("oracle-send").disabled = true;
+  $("oracle-send").textContent = "L'Oracolo cerca e prova i comandi…";
   try {
-    renderGeneration(await api("/api/genera", "POST", { request }));
-    current = null;
-    pollGeneration();
+    oracleAnswers.unshift(await api("/api/oracolo", "POST", { question }));
+    $("oracle-answers").innerHTML = oracleAnswers.map(oracleAnswer).join("");
+    $("oracle-question").value = "";
   } catch (error) {
     showError(error.message);
-    $("gen-send").disabled = false;
+  } finally {
+    $("oracle-send").disabled = false;
+    $("oracle-send").textContent = "Chiedi";
   }
 }
 
@@ -878,10 +778,14 @@ function setTab(name) {
 
 function route() {
   const [part, number, step] = location.hash.replace(/^#\/?/, "").split("/");
-  const kind = ["challenge", "genera"].includes(part) ? part : "basi";
+  if (part === "oracolo") {
+    setTab("oracolo");
+    showError("");
+    return openOracle();
+  }
+  const kind = part === "challenge" ? "challenge" : "basi";
   setTab(kind);
   showError("");
-  if (kind === "genera") return number ? openGenerated(number) : showGenerate();
   if (!number) return showMap(kind);
   return kind === "basi" ? openLesson(Number(number), step) : openTicket(Number(number));
 }
@@ -898,10 +802,6 @@ $("next-hint").onclick = () => {
 };
 $("reconnect").onclick = connect;
 $("tutor-form").onsubmit = askTutor;
-$("gen-form").onsubmit = requestExercise;
-$("gen-request").onkeydown = (event) => {
-  if (event.key === "Enter" && !event.shiftKey) $("gen-form").requestSubmit();
-};
 $("fixer-start").onclick = startFixer;
 $("llm-form").onsubmit = chooseLlm;
 $("llm-provider").onchange = changeProvider;
@@ -914,6 +814,11 @@ $("tutor-question").onkeydown = (event) => {
 $("exercise-view").onclick = (event) => {
   const button = event.target.closest("button[data-command]");
   if (button) runInTerminal(button.dataset.command);
+};
+$("oracle-view").onclick = $("exercise-view").onclick;
+$("oracle-form").onsubmit = askOracle;
+$("oracle-question").onkeydown = (event) => {
+  if (event.key === "Enter" && !event.shiftKey) $("oracle-form").requestSubmit();
 };
 
 for (const [label, command] of FIRST_STEPS) {

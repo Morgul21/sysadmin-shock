@@ -1,0 +1,102 @@
+[    0.087928] Linux version 6.1.0-26-amd64 (debian-kernel@lists.debian.org)
+[    1.208835] Command line: BOOT_IMAGE=/boot/vmlinuz-6.1.0-26-amd64 root=/dev/sda1 ro quiet
+[    2.461384] Memory: 16302412K/16700416K available
+[    3.255468] ata1: SATA link up 6.0 Gbps (SStatus 133 SControl 300)
+[    4.742023] ata2: SATA link up 3.0 Gbps (SStatus 123 SControl 300)
+[    5.060851] sd 0:0:0:0: [sda] 976773168 512-byte logical blocks: (500 GB/466 GiB)
+[    6.297924] sd 1:0:0:0: [sdb] 3907029168 512-byte logical blocks: (2.00 TB/1.82 TiB)
+[    6.387636] EXT4-fs (sda1): mounted filesystem with ordered data mode
+[    7.602088] EXT4-fs (sdb1): mounted filesystem with ordered data mode
+[    8.978823] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[  860.357673] usb 1-2: USB disconnect, device number 3
+[ 1039.259915] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[ 1222.477668] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[ 1277.722143] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[ 1657.266879] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[ 2474.744515] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[ 2726.358220] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[ 3383.477386] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[ 3432.274107] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[ 3798.844123] gestionale[20036]: segfault at 0 ip 000055d4c1a2b3c4 sp 00007ffd2e1c8a90 error 4
+[ 4279.100174] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[ 4831.607244] usb 1-2: USB disconnect, device number 3
+[ 5441.621615] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[ 5713.504548] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[ 6393.787103] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[ 6986.470373] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[ 7436.756604] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[ 7624.581501] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[ 8489.312483] gestionale[26549]: segfault at 0 ip 000055d4c1a2b3c4 sp 00007ffd2e1c8a90 error 4
+[ 9088.215866] gestionale[12682]: segfault at 0 ip 000055d4c1a2b3c4 sp 00007ffd2e1c8a90 error 4
+[ 9839.913527] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[10684.307061] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[11156.927428] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[11873.966173] usb 1-2: USB disconnect, device number 3
+[12423.456853] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[13030.406660] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[13219.758400] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[13499.741093] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[13546.606353] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[13913.946028] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[14697.469889] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[14962.701575] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[15840.851650] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[16677.021053] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[16856.311340] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[16888.270211] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[17070.312136] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[17098.108184] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[17780.178562] usb 1-2: USB disconnect, device number 3
+[18150.002587] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[18275.601051] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[18643.070626] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[18939.878897] gestionale[11717]: segfault at 0 ip 000055d4c1a2b3c4 sp 00007ffd2e1c8a90 error 4
+[19582.677058] gestionale[2195]: segfault at 0 ip 000055d4c1a2b3c4 sp 00007ffd2e1c8a90 error 4
+[20356.002887] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[21227.913078] gestionale[3945]: segfault at 0 ip 000055d4c1a2b3c4 sp 00007ffd2e1c8a90 error 4
+[21997.123451] gestionale[7942]: segfault at 0 ip 000055d4c1a2b3c4 sp 00007ffd2e1c8a90 error 4
+[22706.111992] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[23485.763186] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[24168.120756] usb 1-2: USB disconnect, device number 3
+[24918.302886] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[25524.763546] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[25960.526811] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[26768.821901] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[26913.156527] usb 1-2: USB disconnect, device number 3
+[27069.459773] usb 1-2: new high-speed USB device number 3 using xhci_hcd
+[27386.611003] e1000e 0000:00:1f.6 eth0: NIC Link is Up 1000 Mbps Full Duplex
+[27818.139788] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[28272.292166] TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.
+[28525.466153] e1000e 0000:00:1f.6 eth0: NIC Link is Down
+[28556.035449] blk_update_request: I/O error, dev sdb, sector 2576133026 op 0x0:(READ)
+[28556.036449] Buffer I/O error on dev sdb1, logical block 322016628, async page read
+[28625.540403] blk_update_request: I/O error, dev sdb, sector 2704395882 op 0x0:(READ)
+[28736.271295] blk_update_request: I/O error, dev sdb, sector 3400102757 op 0x0:(READ)
+[28736.272295] Buffer I/O error on dev sdb1, logical block 425012844, async page read
+[28764.563473] blk_update_request: I/O error, dev sdb, sector 3364937108 op 0x0:(READ)
+[28864.607284] blk_update_request: I/O error, dev sdb, sector 2896591892 op 0x0:(READ)
+[28864.608284] Buffer I/O error on dev sdb1, logical block 362073986, async page read
+[28890.107051] blk_update_request: I/O error, dev sdb, sector 496242937 op 0x0:(READ)
+[28890.108051] Buffer I/O error on dev sdb1, logical block 62030367, async page read
+[28973.745582] blk_update_request: I/O error, dev sdb, sector 3551005030 op 0x0:(READ)
+[28973.746582] Buffer I/O error on dev sdb1, logical block 443875628, async page read
+[28996.811278] blk_update_request: I/O error, dev sdb, sector 3135218333 op 0x0:(READ)
+[29094.873807] blk_update_request: I/O error, dev sdb, sector 2009538180 op 0x0:(READ)
+[29094.874807] Buffer I/O error on dev sdb1, logical block 251192272, async page read
+[29192.835093] blk_update_request: I/O error, dev sdb, sector 3561476485 op 0x0:(READ)
+[29301.592256] blk_update_request: I/O error, dev sdb, sector 2798668502 op 0x0:(READ)
+[29301.593256] Buffer I/O error on dev sdb1, logical block 349833562, async page read
+[29373.370076] blk_update_request: I/O error, dev sdb, sector 1508008255 op 0x0:(READ)
+[29447.096443] blk_update_request: I/O error, dev sdb, sector 1816514819 op 0x0:(READ)
+[29524.200451] blk_update_request: I/O error, dev sdb, sector 2138031858 op 0x0:(READ)
+[29527.200451] EXT4-fs error (device sdb1): ext4_find_entry:1658: inode #2: comm ls: reading directory lblock 0
+[29527.400451] EXT4-fs (sdb1): Remounting filesystem read-only
+[31238.530508] python3 invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=0
+[31238.534508] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,global_oom,task_memcg=/system.slice/gestionale.service,task=python3,pid=8712,uid=1000
+[31238.535508] Out of memory: Killed process 8712 (python3) total-vm:4123456kB, anon-rss:3890120kB, file-rss:0kB, shmem-rss:0kB, UID:1000 pgtables:7712kB oom_score_adj:0
+[32419.652073] python3 invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=0
+[32419.656073] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,global_oom,task_memcg=/system.slice/gestionale.service,task=python3,pid=9883,uid=1000
+[32419.657073] Out of memory: Killed process 9883 (python3) total-vm:4123456kB, anon-rss:3890120kB, file-rss:0kB, shmem-rss:0kB, UID:1000 pgtables:7712kB oom_score_adj:0
+[34356.900730] python3 invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=0
+[34356.904730] oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=/,mems_allowed=0,global_oom,task_memcg=/system.slice/gestionale.service,task=python3,pid=21605,uid=1000
+[34356.905730] Out of memory: Killed process 21605 (python3) total-vm:4123456kB, anon-rss:3890120kB, file-rss:0kB, shmem-rss:0kB, UID:1000 pgtables:7712kB oom_score_adj:0

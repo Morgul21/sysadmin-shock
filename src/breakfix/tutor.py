@@ -12,10 +12,6 @@ l'ha il guardrail di output (`find_spoiler`): se la risposta contiene un comando
 chi si esercita vede invece il prossimo indizio scritto a mano, e l'audit registra il blocco.
 
 Limite noto: il guardrail riconosce i comandi, non le parafrasi ("aggiungi la x a /srv").
-
-Lo stesso agente fa da tutor anche negli esercizi delle Basi (lesson_tutor.py): cambiano il prompt
-e il guardrail, che lì si ricava dalla soluzione di riferimento invece che da regole scritte a mano.
-Per questo `ask_topic` riceve un argomento (`Topic`), e `ask` è il caso del ticket.
 """
 
 from __future__ import annotations
@@ -28,7 +24,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -159,38 +155,6 @@ def recent_commands(box: DockerSandbox | None = None) -> str:
     return result.stdout.strip() if result.exit_code == 0 else ""
 
 
-class Topic(Protocol):
-    """Su cosa risponde il tutor: un ticket o un esercizio delle Basi."""
-
-    id: str  # nell'audit, es. "run-sh-noexec" o "esercizio:5.1"
-
-    def system_prompt(self) -> str: ...
-    def user_message(self, question: str, commands: str, hints_shown: int) -> str: ...
-    def find_spoiler(self, text: str) -> str | None: ...
-    def fallback_hint(self, hints_shown: int) -> str: ...
-
-
-@dataclass(frozen=True)
-class TicketTopic:
-    scenario: Scenario
-
-    @property
-    def id(self) -> str:
-        return self.scenario.id
-
-    def system_prompt(self) -> str:
-        return system_prompt(self.scenario)
-
-    def user_message(self, question: str, commands: str, hints_shown: int) -> str:
-        return user_message(question, commands, hints_shown, self.scenario)
-
-    def find_spoiler(self, text: str) -> str | None:
-        return find_spoiler(text, self.scenario)
-
-    def fallback_hint(self, hints_shown: int) -> str:
-        return fallback_hint(self.scenario, hints_shown)
-
-
 @dataclass(frozen=True)
 class TutorReply:
     text: str  # quello che vede chi si esercita
@@ -210,41 +174,26 @@ async def ask(
     hints_shown: int = 0,
     audit_dir: Path | None = None,
 ) -> TutorReply:
-    """Una domanda al tutor su un ticket."""
-    return await ask_topic(TicketTopic(scenario), question, client, memory, commands=commands,
-                           hints_shown=hints_shown, audit_dir=audit_dir)
-
-
-async def ask_topic(
-    topic: Topic,
-    question: str,
-    client: Client,
-    memory: Memory | None = None,
-    *,
-    commands: str = "",
-    hints_shown: int = 0,
-    audit_dir: Path | None = None,
-) -> TutorReply:
     """Una domanda al tutor, dentro un trace: l'audit si scrive anche se il modello fallisce."""
     if not question.strip():
         raise ValueError("domanda vuota")
     audit_dir = audit_dir or default_audit_dir()
     memory = memory if memory is not None else Memory()
-    message = topic.user_message(question[:MAX_QUESTION_CHARS], commands, hints_shown)
+    message = user_message(question[:MAX_QUESTION_CHARS], commands, hints_shown, scenario)
     raw = None
     error = None
     rule = None
     shown = None
     with ContextTracing().trace("breakfix-tutor") as current:
         try:
-            agent = Agent(name="tutor", client=client, system_prompt=topic.system_prompt(), max_steps=1)
+            agent = Agent(name="tutor", client=client, system_prompt=system_prompt(scenario), max_steps=1)
             # Il runner lavora su una copia della memory: quella vera la aggiorniamo noi, sotto.
             result = await AgentRunner().a_run(agent, message, memory=memory, **generation_kwargs(client))
             raw = result.final_step.text.strip() if result.final_step else ""
             if not raw:
                 raise RuntimeError("il modello non ha risposto")
-            rule = topic.find_spoiler(raw)
-            shown = BLOCKED_MESSAGE.format(hint=topic.fallback_hint(hints_shown)) if rule else raw
+            rule = find_spoiler(raw, scenario)
+            shown = BLOCKED_MESSAGE.format(hint=fallback_hint(scenario, hints_shown)) if rule else raw
         except Exception as exc:
             error = _root_cause(exc)
         # Va letto qui dentro: all'uscita dal trace ContextTracing scarta gli span.
@@ -258,7 +207,7 @@ async def ask_topic(
             error=f"{type(error).__name__}: {error}" if error else None,
             extra={
                 "agent": "tutor",
-                "scenario": topic.id,
+                "scenario": scenario.id,
                 "output_guardrail": {"blocked": rule is not None, "rule": rule, "model_answer": raw},
             },
         )

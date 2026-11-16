@@ -52,7 +52,7 @@ Se avevi già avviato Compose prima di creare il file `.env`, esegui nuovamente
 - [Come funziona l'interfaccia](#interfaccia-web)
 - [Architettura e file principali](#architettura)
 - [Lezioni ed esercizi](#basi)
-- [Genera: esercizi su un comando scritti dall'AI (RAG)](#genera)
+- [Oracolo: comandi dalla Debian Reference, eseguiti sui file di prova (RAG)](#oracolo)
 - [Scenari](#scenari) — contiene spoiler sulle cause dei problemi
 - [Sicurezza e limiti](#sicurezza)
 - [AI Act: classe di rischio, dati, cosa è verificato](#ai-act)
@@ -85,12 +85,17 @@ solo compito da LLM, scrivere: quindi un agente con un tool, `prova_scenario`, c
 verdetto della sandbox finché lo scenario non è valido. Chi scrive non è chi giudica: il check delle
 bozze è quello comune (`baseline`), non lo scrive l'author. Vedi [Bozze generate](#bozze-generate).
 
-**Il generatore è un quarto agente singolo, con due tool e il RAG.** Nella sezione *Genera* si chiede
-un comando ("insegnami awk"): il codice cerca nella *Debian Reference* (BM25) i passaggi che ne parlano,
-l'agente può cercarne altri (`cerca_nella_guida`) e scrive l'esercizio (`prova_esercizio`). Il modello
-decide le due cose aperte, con quali parole cercare e come insegnare il comando; ricerca, controllo e
-verdetto sono codice. Il controllo non lo scrive il modello: le due soluzioni che scrive (una con il
-comando, una senza) devono coincidere su tre preparazioni a caso. Vedi [Genera](#genera).
+**L'Oracolo è RAG con una chiamata al modello, senza tool.** "Come faccio a contare gli errori nel log?":
+il codice cerca nella *Debian Reference* (BM25) i passaggi pertinenti, il modello propone da 2 a 4 comandi
+con le opzioni spiegate e cita il passaggio usato, il codice controlla la fonte, fa passare i comandi dal
+guardrail e li **esegue** nella sandbox su file scritti da noi. L'unica decisione aperta è quali comandi
+proporre; se funzionano lo dice l'output. Vedi [Oracolo](#oracolo).
+
+```text
+  domanda ─► ricerca BM25 ─► passaggi ─► modello ─► comandi + fonte ─► fonte recuperata?
+              (codice)                                                 guardrail, solo lettura
+                                                                       esecuzione nella sandbox ─► output vero
+```
 
 ```text
   manuale di un comando ─► Author agent ── prova_scenario ──► validate (sana, rotta, riparata)
@@ -170,10 +175,10 @@ un'esecuzione non influenza la successiva.
 | Basi: lezioni ed esercizi (CLI `lessons`, `learn`) | [src/breakfix/lessons.py](src/breakfix/lessons.py), [lessons/](lessons/) |
 | Eval del fixer sugli scenari | [src/breakfix/evaluate.py](src/breakfix/evaluate.py) |
 | UI dell'esercizio (FastAPI + xterm.js): ticket, terminale vero, indizi, check | [src/breakfix/web.py](src/breakfix/web.py), [src/breakfix/static/](src/breakfix/static/) |
-| Genera: ricerca BM25 nella Debian Reference (RAG) | [src/breakfix/guide.py](src/breakfix/guide.py) |
-| Genera: agente generatore, validazione con due soluzioni, CLI `breakfix-genera` | [src/breakfix/generator.py](src/breakfix/generator.py) |
-| Genera: tutor sugli esercizi generati, guardrail ricavato dalla soluzione | [src/breakfix/lesson_tutor.py](src/breakfix/lesson_tutor.py) |
-| Test di Genera: ricerca e recall@5, controlli, validazione, API, guardrail (senza Docker né modello) | [tests/test_guide.py](tests/test_guide.py), [tests/test_generator.py](tests/test_generator.py), [tests/test_lesson_tutor.py](tests/test_lesson_tutor.py), [tests/test_web.py](tests/test_web.py) |
+| Oracolo: ricerca BM25 nella Debian Reference (RAG) | [src/breakfix/guide.py](src/breakfix/guide.py) |
+| Oracolo: risposta, controlli, esecuzione, eval (CLI `breakfix-oracolo`) | [src/breakfix/oracolo.py](src/breakfix/oracolo.py), [evals/oracolo.toml](evals/oracolo.toml) |
+| Oracolo: i file di prova e lo script che li genera | [oracolo/dati/](oracolo/dati/), [oracolo/genera_dati.py](oracolo/genera_dati.py) |
+| Test dell'Oracolo e della ricerca (senza Docker né modello) | [tests/test_oracolo.py](tests/test_oracolo.py), [tests/test_guide.py](tests/test_guide.py) |
 | Immagine della sandbox: l'app da rompere (+ log con prompt injection) | [sandbox/Dockerfile](sandbox/Dockerfile), [sandbox/app/](sandbox/app/), [sandbox/app.log](sandbox/app.log) |
 | L'app in container, con le sandbox in un Docker privato | [Dockerfile](Dockerfile), [compose.yaml](compose.yaml), [docker/entrypoint.sh](docker/entrypoint.sh) |
 | Agente fixer di riferimento (multi-provider, memory persistente) | [src/breakfix/agent.py](src/breakfix/agent.py) |
@@ -262,11 +267,12 @@ breakfix-author new chown              # parte da `chown --help` letto nella san
 breakfix-author list
 breakfix-author validate               # rivalida le bozze, senza modello
 breakfix-author start data-dir-root-owned   # per provarla: poi `breakfix-sandbox shell` e `breakfix-author check`
-# Solo da CLI: nella UI la generazione di scenari non c'è (vedi Bozze generate)
+# Solo da CLI: nella UI la generazione non c'è (vedi Bozze generate)
 
-# 9. Genera: un esercizio su un comando, dalla Debian Reference (anche dalla UI, sezione Genera)
-breakfix-genera cerca "awk campi colonne"      # solo la ricerca: i passaggi che riceverebbe l'agente
-breakfix-genera nuovo "insegnami a sommare una colonna con awk"
+# 9. Oracolo: comandi dalla Debian Reference, eseguiti sui file di /srv/oracolo (anche dalla UI)
+breakfix-oracolo chiedi "come conto gli errori del database nel log?"
+breakfix-oracolo verifica   # le risposte attese dell'eval, con i comandi di riferimento (senza modello)
+breakfix-oracolo eval       # 13 domande: l'output di almeno un comando proposto dà la risposta nota?
 
 breakfix-sandbox down
 ```
@@ -277,10 +283,11 @@ breakfix-sandbox down
   (verde se superato). Aprendo una lezione parte il primo esercizio non ancora superato; un selettore a
   trattini passa da un esercizio all'altro (1.1, 1.2, …) e ognuno riparte da una sandbox nuova. Sopra
   l'esercizio c'è la spiegazione della lezione, con i comandi da provare con un clic;
-- **Genera**: si scrive il comando che si vuole imparare e l'AI scrive un esercizio nuovo, provato nella
-  sandbox prima di comparire (la pagina segue ricerche e tentativi dal vivo). Si risolve come un esercizio
-  delle Basi, con la spiegazione scritta dall'AI, il passaggio della guida da cui nasce e *Chiedi al
-  tutor*. Vedi [Genera](#genera);
+- **Oracolo**: una sandbox con file di prova sempre uguali (dipendenti, log dell'app, log del kernel,
+  un archivio) e una casella per le domande su Linux. La risposta spiega prima cos'è e a cosa serve, poi dà
+  alcuni comandi con le opzioni spiegate, l'output vero di ognuno e la sezione della guida da cui viene; un
+  clic lo scrive nel terminale. Vedi
+  [Oracolo](#oracolo);
 - **Challenge**: i ticket come box, raggruppate e colorate per difficoltà (verde, giallo, rosso, sempre
   con la scritta), con le lezioni che preparano. Sono sempre aperte, anche senza aver fatto le lezioni.
   La pagina del ticket mostra il ticket, *Come orientarsi* (i primi comandi: un clic li esegue nel
@@ -437,8 +444,7 @@ sandbox), quindi le serve un Docker. Le strade sono due:
 | `BREAKFIX_AUDIT_DIR` | `.breakfix/audit` | dove salvare l'audit trail |
 | `BREAKFIX_MAX_STEPS` | `20` | passi massimi del fixer (chiamate al modello) prima di fermarsi |
 | `BREAKFIX_DRAFTS_DIR` | `.breakfix/drafts` | dove `breakfix-author` salva le bozze di scenario |
-| `BREAKFIX_GENERATED_DIR` | `.breakfix/generati` | dove Genera salva gli esercizi validati |
-| `BREAKFIX_GUIDE` | il pacchetto `debian-reference-it`, poi `.breakfix/guida/` | il testo della Debian Reference (`debian-reference.it.txt.gz`) |
+| `BREAKFIX_GUIDE` | il pacchetto `debian-reference-it`, poi `.breakfix/guida/` | il testo della Debian Reference (`debian-reference.it.txt.gz`) per l'Oracolo |
 | `BREAKFIX_UI_HOST` | `127.0.0.1` (`0.0.0.0` nel container) | indirizzo su cui ascolta la UI |
 | `JUDGE_PROVIDER` / `JUDGE_MODEL` | quelli del tutor | il giudice di `breakfix-tutor-eval`: meglio un modello più forte |
 
@@ -488,64 +494,106 @@ Una lezione è una cartella `lessons/<numero>-<nome>/` con:
 Come nei ticket si verifica il risultato, mai i comandi digitati: un test controlla che né il testo né
 gli indizi contengano la soluzione.
 
-## Genera
+## Oracolo
 
-Le Basi insegnano i comandi che servono ai ticket, e solo quelli: `awk`, `sed`, `cut` e `sort`, per
-esempio, non ci sono. **Genera** scrive un esercizio nuovo sul comando che si chiede
-([generator.py](src/breakfix/generator.py)): una spiegazione, dei file con dati a caso in
-`/srv/esercizi` e una domanda a cui si risponde usando il comando, come gli esercizi *risposta* delle
-Basi. Poi si risolve con il terminale, *Verifica* e il tutor.
+Le Basi insegnano i comandi che servono ai ticket. Per tutto il resto (`awk`, `sort`, `cut`, `find
+-newermt`, i log del kernel, dove guardare quando un servizio non parte) c'è l'**Oracolo**: una palestra
+libera. Non c'è un esercizio da risolvere: si chiede una cosa su Linux ("cos'è awk?", "quanti errori ci
+sono nel log?", "dove guardo se un servizio non parte?") e si riceve prima una spiegazione breve di cos'è e
+a cosa serve, poi alcuni comandi che la mettono in pratica, dal più semplice al più completo, ognuno con il
+significato delle opzioni (`-c`: conta le righe invece di stamparle). Dove si può, i comandi lavorano sui
+file di prova, così l'output è vero.
 
-**La fonte (RAG).** La *Debian Reference* di Osamu Aoki: libera (GPL-2+), in italiano, e un pacchetto
-Debian (`debian-reference-it`) della stessa versione della sandbox (bookworm), quindi i comandi che
-descrive sono quelli del terminale. Il testo non è nel repository: l'immagine dell'app installa il
-pacchetto. È una guida di amministrazione che spiega cosa fanno i comandi, cioè proprio quello che serve
-a un esercizio su un comando. La ricerca è BM25 ([guide.py](src/breakfix/guide.py)), non embedding: gira
-senza rete e senza un modello in più (il server vLLM non serve embedding) e dà sempre lo stesso
-risultato, così si testa. 430 sezioni (815 passaggi), indicizzate in meno di un secondo. Il limite di una
-ricerca per parole sono i sinonimi che la guida non usa: per questo l'agente ha il tool di ricerca e
-sceglie lui le parole. L'esercizio deve citare un passaggio che l'agente ha davvero ricevuto, e la
-pagina lo mostra sotto la spiegazione.
+**I file li scriviamo noi.** [oracolo/genera_dati.py](oracolo/genera_dati.py) li genera con un seme
+fisso, e la sandbox dell'Oracolo li riceve sempre uguali in `/srv/oracolo`: 40 dipendenti (CSV), 220
+righe di log del gestionale con INFO, WARN ed ERROR, un log del kernel con un disco (`sdb`) che dà errori
+di I/O e viene rimontato in sola lettura e tre interventi dell'OOM killer, un archivio di 24 file di
+dimensioni e date diverse per `du`, `find -size`, `find -newermt`. Niente rete, niente dischi veri: il
+disco "che si guasta" si legge nei log, lo spazio si misura sull'archivio. I log imitano quelli veri anche
+dove complica: ogni intervento dell'OOM killer scrive tre righe, come un kernel 6.1, quindi `grep -ci oom`
+conta 9 e non 3. Nella prima versione c'era solo `Out of memory: Killed process`, e il modello, che cercava
+`oom` come su un `dmesg` vero, trovava 0: il difetto era nei dati, non nel comando.
 
-**La validazione.** Il controllo (`check.sh`) lo scrive il programma: ricalcola la risposta con la
-soluzione di riferimento al momento della Verifica e la confronta con quella scritta. La soluzione però
-la scrive il modello, quindi non ci si fida di una sola: ne scrive due, una con il comando richiesto e
-una senza. Prima dei controlli nella sandbox, il codice verifica che la prima usi davvero il comando e la
-seconda no, che entrambe leggano soltanto, che la preparazione usi dati a caso e passi il guardrail. Poi,
-su tre preparazioni diverse:
+**È RAG.** La domanda cerca i passaggi della *Debian Reference* (Osamu Aoki, GPL-2+, il pacchetto Debian
+`debian-reference-it` della stessa versione della sandbox) con BM25 ([guide.py](src/breakfix/guide.py)):
+senza rete e senza un modello di embedding (il server vLLM non li serve), sempre con lo stesso risultato.
+Chi chiede però scrive "quanti dipendenti", e la guida scrive `awk` e `wc`: una ricerca per parole non
+li collega. Per questo il codice espande la domanda con poche regole scritte a mano ("quanti" → `wc`,
+"colonna/reparto" → `awk`, "modificati prima del" → `find` per data, "kernel/OOM" → messaggi del kernel)
+e fa una ricerca per ogni gruppo, oltre a quella sulla domanda così com'è. Un test controlla che ogni
+domanda dell'eval recuperi la sezione del suo comando. Il modello riceve i passaggi e un'anteprima dei
+file, propone i comandi e cita il passaggio usato; se nessun passaggio tratta il comando, lo propone lo
+stesso e lascia la fonte vuota, e la pagina lo segnala.
 
-1. la preparazione gira e le due soluzioni danno la stessa risposta, non vuota;
-2. la soluzione rilanciata ridà la stessa risposta;
-3. una risposta sbagliata non passa il controllo, quella giusta sì;
-4. la risposta non è scritta nel testo;
+**Il codice controlla, il modello no.**
+- la fonte citata deve essere tra i passaggi recuperati, altrimenti la pagina dice che la spiegazione non
+  è ancorata alla guida;
+- ogni comando passa dal guardrail e deve solo leggere (niente `rm`, `sed -i`, redirezioni su file, `sudo`):
+  quelli che scrivono non vengono eseguiti, e la pagina dice perché;
+- un comando che usa un programma assente nella sandbox (`systemctl`, `journalctl`: è un container senza
+  systemd) viene mostrato ma non eseguito, con il motivo. Un "comando non trovato" direbbe che il comando è
+  sbagliato, e su un server vero non lo è. Il codice lo sa chiedendo alla sandbox (`command -v`) prima di
+  eseguire, non fidandosi del modello;
+- gli altri vengono **eseguiti** nella sandbox e la pagina mostra l'output vero. Una spiegazione sbagliata
+  può passare; un comando che non fa quello che dice si vede;
+- in una pipeline l'uscita è quella dell'ultimo comando: `find file-che-non-c'è | wc -l` stampa `0` ed esce
+  con 0. Se un comando scrive su stderr la pagina dice "eseguito, con errori" e non lo mostra come riuscito.
 
-e la risposta deve cambiare da un giro all'altro. Due calcoli indipendenti che coincidono su dati
-diversi sono una prova; la parola del modello no.
+Il modello non dice quale comando è "il più efficiente": dipende da chi lo misura, e l'output vero dice
+già se ognuno funziona.
 
-**Il tutor sugli esercizi generati** è lo stesso agente dei ticket ([lesson_tutor.py](src/breakfix/lesson_tutor.py)),
-con la spiegazione dell'esercizio e la soluzione (segreta). Il guardrail di output non ha regole scritte
-a mano: si ricava dalla soluzione. Blocca la risposta giusta, calcolata nella sandbox al momento della
-domanda, e i comandi della soluzione con i loro argomenti (`awk -F,`), tranne quelli che il testo o gli
-indizi dicono già. Il meccanismo è provato anche sui 39 esercizi delle Basi, che hanno tutti una
-soluzione: lì il tutor non c'è, perché spiegazione e indizi sono scritti a mano.
+**L'eval non ha bisogno di un giudice.** I file sono nostri, quindi le risposte sono note.
+[evals/oracolo.toml](evals/oracolo.toml) ha 13 domande scritte come le farebbe chi si esercita (errori nel
+log, dipendenti per reparto, errori di I/O del disco, la cartella più grande, i file più vecchi di una
+data). Un caso passa se almeno un comando proposto, eseguito, dà la risposta: lo decide l'output.
+`breakfix-oracolo verifica` controlla le risposte attese con un comando di riferimento sulla sandbox
+vera (13/13 OK).
 
-**Cosa è verificato.**
+**Risultati** (`qwen3.8-27b` sul server vLLM, 13 domande, un run per riga; i report sono in
+`.breakfix/eval/oracolo-*.json`, e ogni risposta ha il suo audit). Ogni riga dice cosa è cambiato rispetto
+alla precedente e perché sono falliti i casi falliti, letto negli audit. "Fonte tra i passaggi": in
+quante risposte la sezione citata era tra quelle recuperate (le altre la pagina le segnala):
 
-| Cosa | Come | Esito |
-| --- | --- | --- |
-| La ricerca trova la sezione giusta | recall@5 su 6 richieste ([test_guide.py](tests/test_guide.py)), gira nel build | 6/6. Le richieste le ho scritte dopo aver visto i risultati: è un controllo di regressione, non un eval cieco |
-| La validazione accetta un esercizio giusto | un esercizio awk scritto a mano (somma di una colonna) sulla sandbox vera | valido, risposte 170, 44, 155 nei tre giri; il controllo accetta la risposta con spazi in più e rifiuta quella sbagliata |
-| La validazione scarta due soluzioni discordi | lo stesso esercizio con una seconda soluzione sbagliata | scartato al primo giro: "solution_sh dice 87, alternative_sh 11" |
-| Controlli prima della sandbox, fonte, agente, API | [test_generator.py](tests/test_generator.py), [test_web.py](tests/test_web.py), senza Docker né modello | test verdi |
-| Quante volte riesce con un modello vero | N richieste, esercizi validi / scartati | **da fare** |
+| Run | Cosa è cambiato | Risultato | Fonte tra i passaggi | Casi falliti e perché |
+|---|---|---|---|---|
+| 1 | prima versione | 7/13 | 6/13 | 6 casi con zero comandi: la ricerca non trovava la sezione del comando ("quanti dipendenti" non porta ad `awk`) e il prompt rinunciava se non poteva citare |
+| 2 | espansione della domanda; "proponi i comandi anche senza fonte" | 11/13 | 8/13 | `kernel-sola-lettura`: zero comandi, il modello giudicava `kern.log` dalle prime righe (l'avvio). `disco-file-vecchi`: "prima del 1 agosto 2026" letto come "prima del 2026", output `0` |
+| 3 | il modello riceve la descrizione dei file che vede chi chiede | 11/13 | 13/13 | `kernel-sola-lettura`: di nuovo zero comandi, "i passaggi non trattano il caso". `kernel-oom`: cercava `oom` come su un kernel vero, e nei nostri dati non c'era (difetto dei dati) |
+| 4 | log dell'OOM killer come un kernel 6.1; "una domanda sui file si risolve cercando nei file" | 11/13 | 10/13 | `dipendenti-dal-2020`: il modello ha ragionato prima del JSON e il parser ha preso `{c++}` di awk per l'inizio. `disco-file-vecchi`: `find ! -newer` con un file di riferimento inventato |
+| 5 | spiegazione prima dei comandi, domande generali su Linux, parser robusto, stderr | 11/13 | 11/13 | `kernel-sola-lettura`: ora cercava nel sistema (`dmesg`, `/var/log/kern.log`) invece che nei file di prova. `disco-file-grandi`: a "quanti" ha elencato i file senza contarli |
+| 6 | "se la domanda parla dei file di prova, usa quelli" | 12/13 | 12/13 | `dipendenti-it`: virgola dimenticata nel JSON, e il parser prendeva il primo comando per la risposta: zero comandi. Corretto dopo il run; rivalutata con il parser nuovo, la stessa risposta dà `8` con tutti e tre i comandi |
 
-**Limiti noti.** La validazione dice che la risposta è coerente con i dati, non che sia quella che il
-testo chiede: due soluzioni possono calcolare la stessa cosa sbagliata. Non dice nemmeno che la
-spiegazione sia corretta: lo direbbe un giudice LLM calibrato, come quello del tutor, o una persona.
-Funziona per i comandi che leggono e cercano (awk, sed, cut, sort, grep, find, wc); un comando che
-cambia il sistema chiederebbe un controllo diverso per ogni esercizio, che il modello dovrebbe scrivere.
-La generazione occupa la sandbox per minuti. Nella sandbox non ci sono pacchetti oltre a quelli
-dell'immagine (c'è `mawk`, non `gawk`).
+Cosa dicono questi numeri:
+- dal run 2 in poi ogni caso è passato almeno una volta, e nessuno è fallito sempre: i fallimenti si
+  spostano da un run all'altro anche senza cambiare il codice che li riguarda. Il modello non è
+  deterministico, e 13 domande per run sono poche per distinguere 11 da 12. Per dire che una modifica
+  migliora davvero servirebbero più run per versione;
+- 9 fallimenti su 15 erano colpa nostra, non del modello: la ricerca (i 6 del run 1), i dati
+  (`kernel-oom`), il parser (run 4 e 6). L'eval li ha trovati perché il verdetto è l'output di un comando, e l'audit dice
+  perché;
+- gli errori veri del modello (una data letta male, un file di riferimento inventato, "quanti" senza
+  contare) la pagina li mostra: l'output è `0`, o un errore, o un elenco al posto di un numero. Nessuno
+  è passato per buono;
+- in nessun run un comando proposto è stato bloccato: il modello ha rispettato "solo comandi che
+  leggono". Il blocco resta comunque nel codice, perché una regola nel prompt non è una garanzia.
+
+**Perché l'Oracolo e non esercizi generati.** Prima ho provato a far generare all'AI degli esercizi
+completi (spiegazione, dati, domanda, soluzione), validati con due soluzioni indipendenti su tre
+preparazioni a caso (commit `ec30886`). La sandbox validava la coerenza tra soluzioni e dati, non che il
+testo descrivesse i dati: il primo esercizio chiesto da una persona aveva un file di una riga, "cognomi"
+di 36 caratteri casuali, un testo che parlava di tre campi su righe che ne avevano di più, e indizi che
+insieme davano il comando. Per controllarlo serviva un giudice LLM, e il giudice (`qwen3.8-27b`) non ha
+superato la calibrazione su 9 esercizi giudicati a mano: 78% su due voci, sotto la soglia dell'80%, con
+errori in entrambe le direzioni. Con l'Oracolo il rischio cambia posto: i dati sono nostri e il verdetto
+su un comando lo dà la sua esecuzione.
+
+**Limiti noti.** Le spiegazioni e il significato delle opzioni restano del modello: l'output dimostra che
+il comando funziona, non che la spiegazione sia esatta. La ricerca per parole perde i sinonimi che la
+guida non usa. L'eval copre solo le domande sui file di prova, perché lì la risposta è nota; le domande
+generali ("dove guardo se un servizio non parte?") non hanno un output da confrontare e restano verificate
+solo in parte: i comandi che girano nella sandbox mostrano l'output, `systemctl` e `journalctl` no. È una
+palestra libera: si esplora, non si viene valutati, e l'AI dà i comandi. Il percorso con le verifiche
+resta in Basi e Challenge.
 
 ## Scenari
 
@@ -887,8 +935,7 @@ Dove il design è stato sfidato e cosa è cambiato dopo. Il coding agent usato �
 - [x] Author (`breakfix-author`): bozze di scenario dal manuale di un comando, validate dalla sandbox. Un agente con un tool al posto della DagPipeline Author→Breaker→Validator: rompere e validare non richiedono un modello
 - [x] Generazione provata anche nella UI (sezione "Generate dall'AI") e poi tolta: 2 scenari nuovi su 9 esecuzioni. Resta da CLI, con controlli sulle copie (stesso comando sullo stesso file, riparazione già esistente, ticket che nomina il file)
 - [ ] **Next step: challenge generate da guasti reali.** Serve (1) una fonte di problemi veri, per esempio un libro di troubleshooting o dei postmortem, da cui recuperare il caso con RAG al posto del `--help`; (2) una sandbox più ricca, con più servizi, altrimenti lo spazio dei guasti resta quello di oggi; (3) un giudice LLM per novità e qualità del ticket, che i controlli sui comandi non vedono; (4) un eval dell'author, con il tasso di riuscita su N esecuzioni, come per fixer e tutor. Solo dopo ha senso riportarla nella UI
-- [x] Genera: esercizi su un comando da una richiesta, con RAG (BM25) sulla Debian Reference, validati con due soluzioni indipendenti su tre preparazioni a caso; tutor con guardrail ricavato dalla soluzione
-- [ ] Eval di Genera con un modello vero (quante richieste danno un esercizio valido) e giudice LLM per la spiegazione
+- [x] Oracolo: RAG (BM25) sulla Debian Reference, comandi eseguiti sui file di prova, eval con risposte note
 - [ ] Extra: indizi e regole anti-spoiler generati, eval in CI
 
 ## Note e difficoltà

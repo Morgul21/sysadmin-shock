@@ -36,7 +36,7 @@ breakfix-tutor-eval = "breakfix.tutor_eval:main"
 breakfix-sandbox = "breakfix.lab:main"
 breakfix-eval = "breakfix.evaluate:main"
 breakfix-author = "breakfix.author:main"
-breakfix-genera = "breakfix.generator:main"
+breakfix-oracolo = "breakfix.oracolo:main"
 breakfix-ui = "breakfix.web:main"
 
 [tool.setuptools.packages.find]

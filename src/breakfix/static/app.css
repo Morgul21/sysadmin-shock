@@ -343,6 +343,7 @@ code {
 .step-tag.ok { color: var(--pass-text); background: var(--pass-bg); }
 .step-tag.error { color: var(--fail-text); background: var(--fail-bg); }
 .step-tag.blocked { color: var(--bg); background: var(--amber); }
+.step-tag.absent { color: var(--muted); border: 1px solid var(--border); }
 #fixer-result { margin-top: 10px; }
 #fixer-result .verdict { margin-bottom: 8px; }
 .fixer-answer { white-space: pre-wrap; background: var(--hint-bg); border-left: 3px solid var(--accent); border-radius: 3px; padding: 10px 14px; }
@@ -387,29 +388,27 @@ pre {
   background: var(--surface);
 }
 
-/* Genera */
-#gen-page { flex: 1; overflow-y: auto; padding: 16px; }
-.gen { max-width: 920px; margin: 0 auto; }
-.gen > * + * { margin-top: 12px; }
-.gen-form label { display: block; font: 600 14px var(--mono); color: var(--strong); margin-bottom: 8px; }
-.gen-form .muted { margin-top: 8px; }
-.gen-status { font-family: var(--mono); color: var(--amber); }
-.gen-status.done { color: var(--pass-text); }
-.gen-status.failed, .gen-status.error { color: var(--fail-text); }
-.gen-search { font-size: 13px; margin: 0 0 6px; }
-.gen-search code { overflow-wrap: anywhere; }
-.gen-attempts { margin: 10px 0 0; padding-left: 26px; font-size: 13px; }
-.gen-attempts li { margin: 0 0 4px; }
-#gen-details { margin-top: 10px; }
-#gen-details pre { max-height: 220px; overflow: auto; }
-#gen-result { margin-top: 12px; }
-#gen-result .verdict { margin-bottom: 10px; }
-.gen-list-title { margin-top: 28px !important; color: var(--label); font-size: 13px; text-transform: uppercase; letter-spacing: .15em; }
-.gen-grid { display: flex; flex-wrap: wrap; gap: 12px; }
-.box-source { font-size: 12px; color: var(--muted); }
-.gen-source { margin-top: 12px; }
-.gen-source summary { font: 13px var(--mono); color: var(--label); }
-.gen-source pre { max-height: 260px; overflow: auto; }
+/* Oracolo */
+#oracle-view > * + * { margin-top: 12px; }
+.oracle-files { margin: 0; padding-left: 20px; font-size: 13px; }
+.oracle-files li + li { margin-top: 4px; }
+.oracle-files button { font: 12px var(--mono); padding: 1px 6px; margin-left: 6px; }
+.oracle-answer { border-top: 1px solid var(--border); padding-top: 12px; }
+.oracle-answer > * + * { margin-top: 10px; }
+.oracle-cmd { background: var(--hint-bg); border-left: 3px solid var(--accent); border-radius: 3px; padding: 10px 14px; }
+.oracle-cmd.failed { border-left-color: var(--hard); }
+.oracle-cmd.blocked, .oracle-cmd.warned { border-left-color: var(--amber); }
+.oracle-cmd.unavailable { border-left-color: var(--border); }
+.oracle-explanation { font-size: 14px; line-height: 1.5; }
+.oracle-line { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+.oracle-line code { font-size: 13px; overflow-wrap: anywhere; }
+.oracle-line button { font: 12px var(--mono); padding: 2px 8px; flex-shrink: 0; }
+.oracle-cmd p { margin: 6px 0 0; }
+.oracle-options { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.oracle-options code { font-size: 12px; }
+.oracle-cmd pre { max-height: 200px; overflow: auto; }
+.oracle-source { font-size: 13px; }
+.oracle-source.warn { color: var(--amber); }
 
 @media (max-width: 860px) {
   body { height: auto; }

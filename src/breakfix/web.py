@@ -9,9 +9,9 @@ Fa quello che fa la CLI `breakfix-sandbox` (list, start, lessons, learn, shell, 
 Come nella shell della CLI, chi si esercita è root e i comandi non passano dal guardrail:
 il guardrail protegge dagli agenti, non da chi si esercita. Il verdetto lo dà sempre check.sh.
 
-La sezione Genera crea un esercizio nuovo su un comando da una richiesta ("insegnami awk"): l'AI
-cerca nella Debian Reference e scrive l'esercizio, il codice lo valida nella sandbox (generator.py).
-Si risolve come un esercizio delle Basi, con il tutor accanto.
+L'Oracolo risponde a "come faccio a...?" sui file di prova di /srv/oracolo: cerca nella Debian Reference,
+propone alcuni comandi con le opzioni spiegate e li esegue nella sandbox, così l'output vero dice se
+funzionano (oracolo.py).
 
 Dopo aver risolto un ticket, "Confronta con l'AI" mostra come l'ha affrontato il fixer: l'ultima prova
 salvata da `breakfix-eval`, senza toccare la sandbox. Da lì si può anche rilanciare il fixer dal vivo
@@ -54,12 +54,12 @@ from starlette.datastructures import Headers
 
 from pydantic import BaseModel, Field
 
-from breakfix import generator, lesson_tutor, lessons, sandbox, tutor
+from breakfix import lessons, oracolo, sandbox, tutor
 from breakfix.agent import (API_KEY_VARS, DEFAULT_MODELS, OLLAMA_BASE_URL, AgentRunError, build_llm_client,
                             default_audit_dir, utf8_console)
 from breakfix.evaluate import EVAL_DIR, evaluate_scenario, write_report
 from breakfix.guardrail import BLOCKED_PREFIX
-from breakfix.guide import SOURCE_LICENSE, SOURCE_NAME, GuideMissing, load_index
+from breakfix.guide import GuideMissing
 from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
 from breakfix.lessons import Exercise, LessonLab
 from breakfix.sandbox import DockerSandbox
@@ -162,38 +162,13 @@ def exercise_view(exercise: Exercise) -> dict[str, Any]:
     }
 
 
-def generated_view(generated: generator.Generated) -> dict[str, Any]:
-    """Un esercizio generato: come uno delle Basi, con la spiegazione scritta dall'AI e la fonte."""
-    e, source = generated.exercise, generated.source
-    return {
-        "kind": "generato",
-        "id": generated.id,
-        "title": e.title,
-        "command": generated.command,
-        "task": e.task,
-        "hints": list(e.hints),
-        "explanation": generated.explanation,
-        "model": generated.model,
-        "created": generated.created,
-        "source": {"guide": source.get("guida"), "license": source.get("licenza"), "section": source.get("sezione"),
-                   "title": source.get("titolo"), "text": source.get("testo"), "request": source.get("richiesta")},
-    }
-
-
-def _tutor_context(generated: generator.Generated) -> tuple[str, str, tuple[str, ...]]:
-    source = generated.source
-    explanation = (f"{generated.explanation}\n\nDalla {source.get('guida')} (§{source.get('sezione')}):\n"
-                   f"{source.get('testo', '')}")
-    return f"Esercizio generato sul comando {generated.command}", explanation, (f"{generated.command}(1)",)
-
-
 class CheckRequest(BaseModel):
     # Solo per gli esercizi di tipo risposta; i ticket e gli esercizi di stato non la usano.
     answer: str | None = Field(default=None, max_length=lessons.MAX_ANSWER_CHARS)
 
 
-class GenerateRequest(BaseModel):
-    request: str = Field(min_length=1, max_length=generator.MAX_REQUEST_CHARS)
+class OracleRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=oracolo.MAX_QUESTION_CHARS)
 
 
 class TutorRequest(BaseModel):
@@ -268,59 +243,6 @@ def _fixer_running() -> bool:
 def require_no_fixer() -> None:
     if _fixer_running():
         raise HTTPException(409, "l'AI sta lavorando sulla sandbox: aspetta che finisca")
-    if _generation_running():
-        raise HTTPException(409, "l'AI sta provando un esercizio nella sandbox: aspetta che finisca")
-
-
-@dataclass
-class GenerationRun:
-    """Un'esecuzione del generatore. Ricerche e tentativi si leggono dal banco mentre l'agente lavora."""
-
-    request: str
-    model: str
-    status: str = "running"  # running, done (c'è un esercizio), failed (nessuno valido), error
-    bench: Any = None
-    generated: Any = None
-    answer: str | None = None
-    error: str | None = None
-    audit: str | None = None
-    task: asyncio.Task | None = None
-
-    def view(self) -> dict[str, Any]:
-        bench = self.bench
-        attempts = [{"number": n, "ok": not a["problems"], "tried_in_sandbox": a["tried_in_sandbox"],
-                     "source": a["draft"].get("fonte"), "problems": a["problems"], "answers": a.get("answers", [])}
-                    for n, a in enumerate(bench.attempts if bench else [], start=1)]
-        return {"status": self.status, "request": self.request, "model": self.model, "error": self.error,
-                "searches": list(bench.searches) if bench else [], "attempts": attempts,
-                "attempts_max": bench.max_attempts if bench else None, "audit": self.audit, "answer": self.answer,
-                "exercise": generated_view(self.generated) if self.generated else None}
-
-
-_generation: GenerationRun | None = None
-
-
-def _generation_running() -> bool:
-    return _generation is not None and _generation.status == "running"
-
-
-async def _run_generation(run: GenerationRun, client: Any) -> None:
-    def keep(bench: Any) -> None:
-        run.bench = bench
-
-    try:
-        result = await generator.generate(run.request, client, generator.GeneratedLab(), on_bench=keep)
-    except AgentRunError as exc:
-        run.status, run.error, run.audit = "error", str(exc), exc.audit_path.name
-    except Exception as exc:  # es. Docker giù a metà
-        run.status, run.error = "error", f"{type(exc).__name__}: {exc}"
-    else:
-        run.generated, run.answer, run.audit = result.generated, result.answer, result.audit_path.name
-        run.status = "done" if result.generated else "failed"
-    finally:
-        # L'ultimo tentativo lascia la sandbox con i dati di un giro: si riparte da una sana.
-        with contextlib.suppress(*DOCKER_ERRORS):
-            await asyncio.to_thread(sandbox.reset)
 
 
 async def _run_fixer(run: FixerRun, scenario: Scenario, client: Any) -> None:
@@ -426,8 +348,8 @@ def lesson_list() -> list[dict[str, Any]]:
 def active() -> dict[str, Any] | None:
     if exercise := lessons.active_exercise():
         return exercise_view(exercise)
-    if generated := generator.active_generated():
-        return generated_view(generated)
+    if oracolo.is_active():
+        return oracolo.view()
     scenario = _active()
     return scenario_view(scenario) if scenario else None
 
@@ -462,57 +384,34 @@ def learn(key: str) -> dict[str, Any]:
     return exercise_view(_start_sandbox(lessons.get_exercise, key, LessonLab().start))
 
 
-@app.get("/api/generati")
-def generated_list() -> dict[str, Any]:
-    """La sezione Genera: gli esercizi generati (dal più recente) e se la guida c'è."""
+@app.post("/api/oracolo/start", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
+def start_oracle() -> dict[str, Any]:
+    """Sandbox nuova con i file dell'Oracolo."""
+    _start_sandbox(lambda key: key, oracolo.LABEL, lambda _: oracolo.start())
+    return oracolo.view()
+
+
+@app.post("/api/oracolo", dependencies=[Depends(require_same_origin)])
+async def ask_oracle(request: OracleRequest) -> dict[str, Any]:
+    """Una domanda all'Oracolo: ricerca nella guida, comandi proposti dal modello, eseguiti nella sandbox."""
+    if not await asyncio.to_thread(oracolo.is_active):
+        raise HTTPException(409, "l'Oracolo lavora sui suoi file: apri la sezione Oracolo")
+    client = _llm_client("Oracolo")
     try:
-        load_index()
-        missing = None
-    except GuideMissing as exc:
-        missing = str(exc)
-    return {"guide": {"name": SOURCE_NAME, "license": SOURCE_LICENSE, "missing": missing},
-            "exercises": [generated_view(g) for g in generator.load_generated()]}
-
-
-@app.post("/api/generati/{exercise_id}/start",
-          dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
-def start_generated(exercise_id: str) -> dict[str, Any]:
-    generated = _start_sandbox(generator.get_generated, exercise_id,
-                               lambda g: generator.GeneratedLab().start(g.exercise))
-    return generated_view(generated)
-
-
-@app.get("/api/genera")
-def generation_status() -> dict[str, Any] | None:
-    return _generation.view() if _generation else None
-
-
-@app.post("/api/genera", status_code=202, dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
-async def start_generation(request: GenerateRequest) -> dict[str, Any]:
-    """Il generatore in sottofondo: ricerca nella guida, agente, validazione. Si segue con GET /api/genera.
-
-    Usa la sandbox (tre giri per tentativo): il ticket o l'esercizio aperto si perde."""
-    global _generation, _fixer
-    try:
-        text = generator.clean_request(request.request)
-        await asyncio.to_thread(load_index)
+        answer = await oracolo.ask(request.question, client)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except GuideMissing as exc:
         raise HTTPException(503, str(exc)) from exc
-    client = _llm_client("modello")
-    run = GenerationRun(request=text, model=client.model_name)
-    run.task = asyncio.create_task(_run_generation(run, client))  # il riferimento la tiene viva
-    _generation, _fixer = run, None
-    return run.view()
+    except AgentRunError as exc:
+        raise HTTPException(503, f"l'Oracolo non ha risposto ({exc})") from exc
+    return answer.view()
 
 
 @app.post("/api/check", dependencies=[Depends(require_same_origin)])
 def check(request: CheckRequest | None = None) -> dict[str, Any]:
     if exercise := lessons.active_exercise():
         result = LessonLab().check(exercise, request.answer if request else None)
-    elif generated := generator.active_generated():
-        result = generator.GeneratedLab().check(generated.exercise, request.answer if request else None)
     elif scenario := _active():
         result = DockerLab().check(scenario)
     else:
@@ -645,27 +544,17 @@ def _llm_client(who: str) -> Any:
 
 @app.post("/api/tutor", dependencies=[Depends(require_same_origin)])
 async def ask_tutor(request: TutorRequest) -> dict[str, Any]:
-    # Un ticket o un esercizio generato: stesso agente, prompt e guardrail diversi (lesson_tutor.py).
-    # Nelle Basi no: lì ci sono la spiegazione e gli indizi scritti a mano.
-    generated = await asyncio.to_thread(generator.active_generated)
-    scenario = None if generated else await asyncio.to_thread(_active)
-    if generated is None and scenario is None:
-        raise HTTPException(409, "il tutor segue i ticket e gli esercizi generati: avviane uno")
+    # Solo i ticket: negli esercizi delle basi la risposta va trovata sul sistema, non chiesta.
+    scenario = await asyncio.to_thread(_active)
+    if scenario is None:
+        raise HTTPException(409, "il tutor segue i ticket: avviane uno dalle Challenge")
     container = await asyncio.to_thread(sandbox.container_id)
     conversation = tutor.load_conversation(container)
     commands = await asyncio.to_thread(tutor.recent_commands)
     client = _llm_client("tutor")
     try:
-        if generated:
-            # La risposta giusta adesso (i dati sono a caso): il guardrail la cerca nella risposta del tutor.
-            answer = await asyncio.to_thread(lesson_tutor.current_answer, generated.exercise)
-            reply = await lesson_tutor.ask(generated.exercise, request.question, client, conversation.memory,
-                                           commands=commands, hints_shown=request.hints_shown, answer=answer,
-                                           lesson=_tutor_context(generated),
-                                           label=generator.LABEL_PREFIX + generated.id)
-        else:
-            reply = await tutor.ask(scenario, request.question, client, conversation.memory,
-                                    commands=commands, hints_shown=request.hints_shown)
+        reply = await tutor.ask(scenario, request.question, client, conversation.memory,
+                                commands=commands, hints_shown=request.hints_shown)
     except ValueError as exc:  # domanda fatta solo di spazi
         raise HTTPException(422, str(exc)) from exc
     except AgentRunError as exc:

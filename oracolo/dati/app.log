@@ -1,0 +1,220 @@
+2026-11-12 07:59:20 ERROR [db] connessione al database rifiutata
+2026-11-12 07:59:39 INFO  [http] POST /ordini 201 in 4384 ms
+2026-11-12 08:01:17 INFO  [http] GET /ordini 200 in 1924 ms
+2026-11-12 08:04:47 INFO  [http] GET /ordini 200 in 61 ms
+2026-11-12 08:04:58 WARN  [cache] cache quasi piena: 90%
+2026-11-12 08:05:53 INFO  [http] POST /ordini 201 in 2516 ms
+2026-11-12 08:07:12 ERROR [http] POST /ordini 500: errore interno
+2026-11-12 08:09:15 WARN  [db] query lenta sulla tabella ordini: 522 ms
+2026-11-12 08:09:28 INFO  [http] GET /ordini 200 in 4787 ms
+2026-11-12 08:10:52 WARN  [http] risposta lenta: GET /report 3461 ms
+2026-11-12 08:11:13 WARN  [db] query lenta sulla tabella ordini: 4000 ms
+2026-11-12 08:13:02 INFO  [http] POST /ordini 201 in 4609 ms
+2026-11-12 08:14:00 INFO  [cache] cache aggiornata: 3179 voci
+2026-11-12 08:15:27 INFO  [http] GET /ordini 200 in 2175 ms
+2026-11-12 08:17:14 INFO  [http] GET /ordini 200 in 3052 ms
+2026-11-12 08:19:57 INFO  [backup] backup completato in 212 s
+2026-11-12 08:23:44 INFO  [http] GET /ordini 200 in 4019 ms
+2026-11-12 08:26:24 INFO  [http] GET /ordini 200 in 3146 ms
+2026-11-12 08:30:15 INFO  [http] GET /ordini 200 in 1193 ms
+2026-11-12 08:31:28 WARN  [db] query lenta sulla tabella ordini: 3113 ms
+2026-11-12 08:32:41 INFO  [http] POST /ordini 201 in 1723 ms
+2026-11-12 08:35:57 ERROR [db] timeout della query dopo 30 s
+2026-11-12 08:38:40 INFO  [http] POST /ordini 201 in 3937 ms
+2026-11-12 08:39:13 WARN  [cache] cache quasi piena: 85%
+2026-11-12 08:41:33 INFO  [http] GET /ordini 200 in 1431 ms
+2026-11-12 08:42:16 INFO  [http] POST /ordini 201 in 4039 ms
+2026-11-12 08:43:38 WARN  [db] query lenta sulla tabella ordini: 1242 ms
+2026-11-12 08:46:38 INFO  [http] POST /ordini 201 in 545 ms
+2026-11-12 08:46:56 INFO  [http] GET /ordini 200 in 3556 ms
+2026-11-12 08:50:29 INFO  [http] GET /ordini 200 in 3381 ms
+2026-11-12 08:50:42 INFO  [http] POST /ordini 201 in 3136 ms
+2026-11-12 08:54:03 INFO  [http] POST /ordini 201 in 3150 ms
+2026-11-12 08:57:31 INFO  [http] POST /ordini 201 in 982 ms
+2026-11-12 08:59:43 INFO  [http] GET /ordini 200 in 2952 ms
+2026-11-12 09:01:20 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 09:05:00 INFO  [http] GET /ordini 200 in 1385 ms
+2026-11-12 09:07:30 INFO  [http] GET /ordini 200 in 2875 ms
+2026-11-12 09:09:36 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 09:10:55 INFO  [backup] backup completato in 166 s
+2026-11-12 09:14:06 INFO  [http] POST /ordini 201 in 1100 ms
+2026-11-12 09:18:03 WARN  [cache] cache quasi piena: 91%
+2026-11-12 09:22:03 ERROR [db] timeout della query dopo 30 s
+2026-11-12 09:23:31 INFO  [cache] cache aggiornata: 8989 voci
+2026-11-12 09:25:10 INFO  [cache] cache aggiornata: 1032 voci
+2026-11-12 09:25:19 INFO  [http] POST /ordini 201 in 722 ms
+2026-11-12 09:28:26 INFO  [http] POST /ordini 201 in 4331 ms
+2026-11-12 09:30:02 INFO  [cache] cache aggiornata: 3479 voci
+2026-11-12 09:31:23 INFO  [http] POST /ordini 201 in 1625 ms
+2026-11-12 09:33:19 INFO  [http] POST /ordini 201 in 2484 ms
+2026-11-12 09:36:00 INFO  [cache] cache aggiornata: 8342 voci
+2026-11-12 09:37:20 INFO  [http] POST /ordini 201 in 905 ms
+2026-11-12 09:38:37 INFO  [cache] cache aggiornata: 8141 voci
+2026-11-12 09:39:04 INFO  [http] POST /ordini 201 in 1461 ms
+2026-11-12 09:41:13 WARN  [cache] cache quasi piena: 91%
+2026-11-12 09:42:45 INFO  [backup] backup completato in 311 s
+2026-11-12 09:44:17 INFO  [backup] backup completato in 297 s
+2026-11-12 09:45:55 INFO  [http] GET /ordini 200 in 325 ms
+2026-11-12 09:49:10 WARN  [http] risposta lenta: GET /report 2353 ms
+2026-11-12 09:51:21 INFO  [http] GET /ordini 200 in 2360 ms
+2026-11-12 09:52:55 INFO  [http] POST /ordini 201 in 309 ms
+2026-11-12 09:55:30 INFO  [http] POST /ordini 201 in 2333 ms
+2026-11-12 09:56:44 INFO  [http] GET /ordini 200 in 3147 ms
+2026-11-12 09:57:32 INFO  [cache] cache aggiornata: 3870 voci
+2026-11-12 09:59:59 INFO  [cache] cache aggiornata: 4175 voci
+2026-11-12 10:00:22 INFO  [cache] cache aggiornata: 204 voci
+2026-11-12 10:01:30 INFO  [cache] cache aggiornata: 862 voci
+2026-11-12 10:02:00 INFO  [http] GET /ordini 200 in 3853 ms
+2026-11-12 10:03:22 ERROR [db] connessione al database rifiutata
+2026-11-12 10:04:44 INFO  [http] GET /ordini 200 in 3774 ms
+2026-11-12 10:08:08 INFO  [http] GET /ordini 200 in 2686 ms
+2026-11-12 10:11:18 INFO  [http] GET /ordini 200 in 410 ms
+2026-11-12 10:11:33 INFO  [http] GET /ordini 200 in 3697 ms
+2026-11-12 10:12:17 INFO  [http] POST /ordini 201 in 4345 ms
+2026-11-12 10:12:24 INFO  [http] POST /ordini 201 in 1180 ms
+2026-11-12 10:14:52 INFO  [http] POST /ordini 201 in 934 ms
+2026-11-12 10:18:39 INFO  [cache] cache aggiornata: 4788 voci
+2026-11-12 10:20:24 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 10:23:25 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 10:23:59 WARN  [db] query lenta sulla tabella ordini: 142 ms
+2026-11-12 10:24:55 INFO  [http] GET /ordini 200 in 2515 ms
+2026-11-12 10:28:44 INFO  [cache] cache aggiornata: 4288 voci
+2026-11-12 10:32:44 INFO  [http] POST /ordini 201 in 2501 ms
+2026-11-12 10:35:50 ERROR [db] timeout della query dopo 30 s
+2026-11-12 10:37:21 INFO  [http] GET /ordini 200 in 862 ms
+2026-11-12 10:38:24 WARN  [db] query lenta sulla tabella ordini: 4363 ms
+2026-11-12 10:40:31 INFO  [http] POST /ordini 201 in 2015 ms
+2026-11-12 10:43:28 INFO  [http] GET /ordini 200 in 3930 ms
+2026-11-12 10:46:42 ERROR [db] connessione al database rifiutata
+2026-11-12 10:49:52 WARN  [http] risposta lenta: GET /report 3616 ms
+2026-11-12 10:50:33 INFO  [cache] cache aggiornata: 8646 voci
+2026-11-12 10:52:01 INFO  [http] GET /ordini 200 in 889 ms
+2026-11-12 10:53:31 ERROR [db] timeout della query dopo 30 s
+2026-11-12 10:54:17 INFO  [http] GET /ordini 200 in 3455 ms
+2026-11-12 10:55:02 WARN  [db] query lenta sulla tabella ordini: 3744 ms
+2026-11-12 10:58:41 INFO  [http] POST /ordini 201 in 2506 ms
+2026-11-12 10:59:04 INFO  [http] GET /ordini 200 in 3839 ms
+2026-11-12 10:59:47 INFO  [backup] backup completato in 193 s
+2026-11-12 11:03:45 INFO  [cache] cache aggiornata: 395 voci
+2026-11-12 11:07:25 INFO  [http] GET /ordini 200 in 3939 ms
+2026-11-12 11:08:20 INFO  [http] GET /ordini 200 in 3736 ms
+2026-11-12 11:08:49 WARN  [http] risposta lenta: GET /report 3734 ms
+2026-11-12 11:10:41 WARN  [db] query lenta sulla tabella ordini: 3762 ms
+2026-11-12 11:14:26 WARN  [http] risposta lenta: GET /report 1391 ms
+2026-11-12 11:16:37 INFO  [http] GET /ordini 200 in 1901 ms
+2026-11-12 11:20:03 WARN  [http] risposta lenta: GET /report 321 ms
+2026-11-12 11:22:22 INFO  [http] POST /ordini 201 in 1311 ms
+2026-11-12 11:24:13 INFO  [cache] cache aggiornata: 524 voci
+2026-11-12 11:24:27 INFO  [http] GET /ordini 200 in 1481 ms
+2026-11-12 11:26:53 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 11:30:25 INFO  [http] GET /ordini 200 in 568 ms
+2026-11-12 11:33:37 INFO  [http] GET /ordini 200 in 4466 ms
+2026-11-12 11:35:14 INFO  [http] POST /ordini 201 in 3141 ms
+2026-11-12 11:38:27 INFO  [http] POST /ordini 201 in 3121 ms
+2026-11-12 11:38:43 WARN  [cache] cache quasi piena: 85%
+2026-11-12 11:40:44 INFO  [http] GET /ordini 200 in 1261 ms
+2026-11-12 11:43:45 WARN  [db] query lenta sulla tabella ordini: 3487 ms
+2026-11-12 11:45:21 WARN  [http] risposta lenta: GET /report 3469 ms
+2026-11-12 11:46:17 WARN  [http] risposta lenta: GET /report 760 ms
+2026-11-12 11:48:04 INFO  [http] GET /ordini 200 in 58 ms
+2026-11-12 11:52:04 WARN  [cache] cache quasi piena: 92%
+2026-11-12 11:52:56 INFO  [http] GET /ordini 200 in 3212 ms
+2026-11-12 11:55:50 INFO  [http] GET /ordini 200 in 3964 ms
+2026-11-12 11:55:56 WARN  [db] query lenta sulla tabella ordini: 3773 ms
+2026-11-12 11:58:11 WARN  [http] risposta lenta: GET /report 4245 ms
+2026-11-12 11:59:47 INFO  [http] GET /ordini 200 in 1353 ms
+2026-11-12 12:01:36 INFO  [http] GET /ordini 200 in 15 ms
+2026-11-12 12:02:07 INFO  [cache] cache aggiornata: 5877 voci
+2026-11-12 12:05:23 INFO  [cache] cache aggiornata: 2365 voci
+2026-11-12 12:08:47 WARN  [cache] cache quasi piena: 97%
+2026-11-12 12:10:41 INFO  [cache] cache aggiornata: 7940 voci
+2026-11-12 12:13:49 INFO  [http] POST /ordini 201 in 1740 ms
+2026-11-12 12:14:55 WARN  [cache] cache quasi piena: 98%
+2026-11-12 12:16:22 WARN  [cache] cache quasi piena: 93%
+2026-11-12 12:19:07 INFO  [http] GET /ordini 200 in 1800 ms
+2026-11-12 12:19:53 INFO  [http] GET /ordini 200 in 3049 ms
+2026-11-12 12:22:34 WARN  [db] query lenta sulla tabella ordini: 2525 ms
+2026-11-12 12:26:29 INFO  [http] GET /ordini 200 in 3336 ms
+2026-11-12 12:26:35 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 12:28:28 INFO  [cache] cache aggiornata: 4456 voci
+2026-11-12 12:30:40 WARN  [http] risposta lenta: GET /report 2253 ms
+2026-11-12 12:34:36 INFO  [http] POST /ordini 201 in 421 ms
+2026-11-12 12:37:45 WARN  [cache] cache quasi piena: 98%
+2026-11-12 12:41:04 INFO  [cache] cache aggiornata: 7637 voci
+2026-11-12 12:43:00 INFO  [http] GET /ordini 200 in 3574 ms
+2026-11-12 12:43:53 WARN  [db] query lenta sulla tabella ordini: 2818 ms
+2026-11-12 12:46:28 INFO  [http] GET /ordini 200 in 641 ms
+2026-11-12 12:47:39 INFO  [http] POST /ordini 201 in 4564 ms
+2026-11-12 12:51:10 INFO  [backup] backup completato in 316 s
+2026-11-12 12:52:58 INFO  [http] GET /ordini 200 in 2429 ms
+2026-11-12 12:54:17 INFO  [http] GET /ordini 200 in 51 ms
+2026-11-12 12:55:10 INFO  [cache] cache aggiornata: 6249 voci
+2026-11-12 12:56:49 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 13:00:32 WARN  [db] query lenta sulla tabella ordini: 194 ms
+2026-11-12 13:00:45 INFO  [backup] backup completato in 304 s
+2026-11-12 13:03:03 INFO  [http] POST /ordini 201 in 1466 ms
+2026-11-12 13:03:15 INFO  [http] POST /ordini 201 in 1824 ms
+2026-11-12 13:03:45 INFO  [http] POST /ordini 201 in 1944 ms
+2026-11-12 13:05:13 INFO  [http] GET /ordini 200 in 1296 ms
+2026-11-12 13:05:52 INFO  [cache] cache aggiornata: 6295 voci
+2026-11-12 13:07:28 INFO  [http] GET /ordini 200 in 1872 ms
+2026-11-12 13:10:39 INFO  [http] GET /ordini 200 in 1121 ms
+2026-11-12 13:10:53 WARN  [db] query lenta sulla tabella ordini: 2780 ms
+2026-11-12 13:13:41 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 13:13:52 WARN  [db] query lenta sulla tabella ordini: 3619 ms
+2026-11-12 13:15:31 INFO  [http] POST /ordini 201 in 389 ms
+2026-11-12 13:16:37 WARN  [http] risposta lenta: GET /report 2660 ms
+2026-11-12 13:17:42 INFO  [cache] cache aggiornata: 5502 voci
+2026-11-12 13:18:58 ERROR [db] timeout della query dopo 30 s
+2026-11-12 13:20:49 WARN  [cache] cache quasi piena: 88%
+2026-11-12 13:22:50 WARN  [db] query lenta sulla tabella ordini: 837 ms
+2026-11-12 13:25:01 INFO  [cache] cache aggiornata: 7107 voci
+2026-11-12 13:28:38 INFO  [http] GET /ordini 200 in 1092 ms
+2026-11-12 13:30:15 INFO  [http] POST /ordini 201 in 3490 ms
+2026-11-12 13:33:02 WARN  [db] query lenta sulla tabella ordini: 965 ms
+2026-11-12 13:36:33 INFO  [http] GET /ordini 200 in 3972 ms
+2026-11-12 13:38:18 WARN  [http] risposta lenta: GET /report 3213 ms
+2026-11-12 13:39:28 INFO  [http] GET /ordini 200 in 3896 ms
+2026-11-12 13:41:38 ERROR [db] timeout della query dopo 30 s
+2026-11-12 13:43:35 INFO  [cache] cache aggiornata: 3280 voci
+2026-11-12 13:45:06 INFO  [http] POST /ordini 201 in 1403 ms
+2026-11-12 13:46:34 INFO  [cache] cache aggiornata: 243 voci
+2026-11-12 13:49:42 ERROR [backup] backup fallito: spazio su disco esaurito
+2026-11-12 13:51:40 ERROR [db] timeout della query dopo 30 s
+2026-11-12 13:54:44 INFO  [cache] cache aggiornata: 7396 voci
+2026-11-12 13:56:22 INFO  [http] GET /ordini 200 in 481 ms
+2026-11-12 13:58:02 INFO  [cache] cache aggiornata: 411 voci
+2026-11-12 14:01:23 INFO  [http] POST /ordini 201 in 1476 ms
+2026-11-12 14:05:10 INFO  [http] POST /ordini 201 in 3247 ms
+2026-11-12 14:07:23 INFO  [cache] cache aggiornata: 2105 voci
+2026-11-12 14:08:17 WARN  [db] query lenta sulla tabella ordini: 324 ms
+2026-11-12 14:08:27 INFO  [http] GET /ordini 200 in 1880 ms
+2026-11-12 14:12:00 INFO  [http] GET /ordini 200 in 2313 ms
+2026-11-12 14:13:34 INFO  [http] GET /ordini 200 in 277 ms
+2026-11-12 14:13:45 ERROR [db] timeout della query dopo 30 s
+2026-11-12 14:15:17 INFO  [http] GET /ordini 200 in 1183 ms
+2026-11-12 14:18:16 INFO  [cache] cache aggiornata: 4733 voci
+2026-11-12 14:19:52 INFO  [http] POST /ordini 201 in 3940 ms
+2026-11-12 14:21:56 INFO  [backup] backup completato in 556 s
+2026-11-12 14:23:14 INFO  [http] GET /ordini 200 in 2525 ms
+2026-11-12 14:24:08 INFO  [cache] cache aggiornata: 5929 voci
+2026-11-12 14:26:09 WARN  [cache] cache quasi piena: 93%
+2026-11-12 14:28:28 INFO  [http] POST /ordini 201 in 126 ms
+2026-11-12 14:29:20 INFO  [http] POST /ordini 201 in 4526 ms
+2026-11-12 14:32:12 INFO  [http] GET /ordini 200 in 4425 ms
+2026-11-12 14:32:31 ERROR [db] connessione al database rifiutata
+2026-11-12 14:34:32 INFO  [backup] backup completato in 587 s
+2026-11-12 14:36:29 INFO  [http] GET /ordini 200 in 3651 ms
+2026-11-12 14:37:53 WARN  [cache] cache quasi piena: 89%
+2026-11-12 14:38:09 INFO  [http] GET /ordini 200 in 1855 ms
+2026-11-12 14:38:14 INFO  [http] GET /ordini 200 in 4417 ms
+2026-11-12 14:38:25 INFO  [cache] cache aggiornata: 7210 voci
+2026-11-12 14:39:19 WARN  [cache] cache quasi piena: 99%
+2026-11-12 14:41:37 ERROR [db] connessione al database rifiutata
+2026-11-12 14:45:32 INFO  [http] POST /ordini 201 in 2313 ms
+2026-11-12 14:46:03 INFO  [http] POST /ordini 201 in 2741 ms
+2026-11-12 14:48:17 ERROR [db] connessione al database rifiutata
+2026-11-12 14:50:17 INFO  [http] GET /ordini 200 in 4789 ms
+2026-11-12 14:53:12 INFO  [backup] backup completato in 565 s
+2026-11-12 14:55:53 INFO  [http] POST /ordini 201 in 767 ms
+2026-11-12 14:56:15 ERROR [db] connessione al database rifiutata
