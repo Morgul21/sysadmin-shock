@@ -9,6 +9,10 @@ Fa quello che fa la CLI `breakfix-sandbox` (list, start, lessons, learn, shell, 
 Come nella shell della CLI, chi si esercita è root e i comandi non passano dal guardrail:
 il guardrail protegge dagli agenti, non da chi si esercita. Il verdetto lo dà sempre check.sh.
 
+L'Oracolo risponde a "come faccio a...?" sui file di prova di /srv/oracolo: cerca nella Debian Reference,
+propone alcuni comandi con le opzioni spiegate e li esegue nella sandbox, così l'output vero dice se
+funzionano (oracolo.py).
+
 Dopo aver risolto un ticket, "Confronta con l'AI" mostra come l'ha affrontato il fixer: l'ultima prova
 salvata da `breakfix-eval`, senza toccare la sandbox. Da lì si può anche rilanciare il fixer dal vivo
 (sandbox rotta da capo -> fixer -> check.sh), e la pagina ne segue i comandi mentre lavora.
@@ -50,11 +54,12 @@ from starlette.datastructures import Headers
 
 from pydantic import BaseModel, Field
 
-from breakfix import lessons, sandbox, tutor
+from breakfix import lessons, oracolo, sandbox, tutor
 from breakfix.agent import (API_KEY_VARS, DEFAULT_MODELS, OLLAMA_BASE_URL, AgentRunError, build_llm_client,
                             default_audit_dir, utf8_console)
 from breakfix.evaluate import EVAL_DIR, evaluate_scenario, write_report
 from breakfix.guardrail import BLOCKED_PREFIX
+from breakfix.guide import GuideMissing
 from breakfix.lab import DockerLab, Scenario, get_scenario, load_scenarios, scenario_number, tickets_for
 from breakfix.lessons import Exercise, LessonLab
 from breakfix.sandbox import DockerSandbox
@@ -160,6 +165,10 @@ def exercise_view(exercise: Exercise) -> dict[str, Any]:
 class CheckRequest(BaseModel):
     # Solo per gli esercizi di tipo risposta; i ticket e gli esercizi di stato non la usano.
     answer: str | None = Field(default=None, max_length=lessons.MAX_ANSWER_CHARS)
+
+
+class OracleRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=oracolo.MAX_QUESTION_CHARS)
 
 
 class TutorRequest(BaseModel):
@@ -339,6 +348,8 @@ def lesson_list() -> list[dict[str, Any]]:
 def active() -> dict[str, Any] | None:
     if exercise := lessons.active_exercise():
         return exercise_view(exercise)
+    if oracolo.is_active():
+        return oracolo.view()
     scenario = _active()
     return scenario_view(scenario) if scenario else None
 
@@ -371,6 +382,30 @@ def start(number: int) -> dict[str, Any]:
 @app.post("/api/learn/{key}", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
 def learn(key: str) -> dict[str, Any]:
     return exercise_view(_start_sandbox(lessons.get_exercise, key, LessonLab().start))
+
+
+@app.post("/api/oracolo/start", dependencies=[Depends(require_same_origin), Depends(require_no_fixer)])
+def start_oracle() -> dict[str, Any]:
+    """Sandbox nuova con i file dell'Oracolo."""
+    _start_sandbox(lambda key: key, oracolo.LABEL, lambda _: oracolo.start())
+    return oracolo.view()
+
+
+@app.post("/api/oracolo", dependencies=[Depends(require_same_origin)])
+async def ask_oracle(request: OracleRequest) -> dict[str, Any]:
+    """Una domanda all'Oracolo: ricerca nella guida, comandi proposti dal modello, eseguiti nella sandbox."""
+    if not await asyncio.to_thread(oracolo.is_active):
+        raise HTTPException(409, "l'Oracolo lavora sui suoi file: apri la sezione Oracolo")
+    client = _llm_client("Oracolo")
+    try:
+        answer = await oracolo.ask(request.question, client)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except GuideMissing as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except AgentRunError as exc:
+        raise HTTPException(503, f"l'Oracolo non ha risposto ({exc})") from exc
+    return answer.view()
 
 
 @app.post("/api/check", dependencies=[Depends(require_same_origin)])

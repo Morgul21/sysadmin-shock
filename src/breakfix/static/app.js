@@ -1,6 +1,6 @@
 // La pagina: le mappe delle basi e delle challenge (box collegate), e la pagina di lavoro con il
 // terminale. Gli indirizzi stanno nel frammento: #/basi, #/basi/5/2 (lezione 5, esercizio 2),
-// #/challenge, #/challenge/3. Ricaricando si resta dove si era, e la sandbox riparte solo se
+// #/challenge, #/challenge/3, #/oracolo. Ricaricando si resta dove si era, e la sandbox riparte solo se
 // l'esercizio o il ticket chiesto non è già quello attivo.
 
 // Il metodo di un sistemista, uguale per tutti i ticket: non dice la causa, dice da dove partire.
@@ -242,6 +242,11 @@ function render(view) {
   $("verdict").hidden = true;
   $("next").hidden = true;
   $("next-ticket").hidden = true;
+  // L'Oracolo usa la stessa pagina con il terminale, ma niente indizi, verifica, tutor o fixer.
+  const isOracle = view.kind === "oracolo";
+  for (const id of ["hints", "next-hint", "actions", "back"]) $(id).hidden = isOracle;
+  $("oracle-view").hidden = !isOracle;
+  if (isOracle) return renderOracle(view);
   const isTicket = view.kind === "ticket";
   $("exercise-view").hidden = isTicket;
   $("ticket-view").hidden = !isTicket;
@@ -629,6 +634,91 @@ async function check() {
   }
 }
 
+// --- Oracolo: "come faccio a...?" sui file di /srv/oracolo. Il server cerca nella guida, il modello propone
+// i comandi, il server li esegue: la pagina mostra comandi, opzioni, output vero e fonte.
+
+const oracleAnswers = []; // le risposte di questa visita, dalla più recente
+
+async function openOracle() {
+  if (current?.kind === "oracolo") {
+    render(current);
+    return;
+  }
+  await start("/api/oracolo/start");
+}
+
+function renderOracle(view) {
+  $("exercise-view").hidden = true;
+  $("ticket-view").hidden = true;
+  $("tutor").hidden = true;
+  $("fixer").hidden = true;
+  $("man").hidden = true;
+  $("llm").hidden = false;
+  loadLlm();
+  $("oracle-files").innerHTML = view.files.map((f) => {
+    const look = f.path.endsWith("/") ? `du -sh ${f.path}*` : `head -n 5 ${f.path}`;
+    return `<li><code>${escape(f.path)}</code> ${escape(f.description)}` +
+      `<button data-command="${attr(look)}" title="${attr(look)}">guarda</button></li>`;
+  }).join("");
+  $("oracle-answers").innerHTML = oracleAnswers.map(oracleAnswer).join("");
+  $("work").hidden = false;
+  if (location.hash !== "#/oracolo") history.replaceState(null, "", "#/oracolo");
+  setTab("oracolo");
+  showWork();
+}
+
+function oracleCommand(c) {
+  // Lo stato lo decide il codice: scriverebbe (bloccato), manca nella sandbox, uscita ≠ 0, oppure uscita 0 ma
+  // con qualcosa su stderr (in una pipeline l'uscita è quella dell'ultimo comando: `find … | wc -l` dà 0).
+  const state = c.blocked ? "blocked" : c.unavailable ? "unavailable"
+    : c.exit_code !== 0 ? "failed" : c.stderr ? "warned" : "";
+  const tag = c.blocked ? '<span class="step-tag blocked">non eseguito</span>'
+    : c.unavailable ? `<span class="step-tag absent">non c'è nella sandbox</span>`
+    : c.exit_code !== 0 ? `<span class="step-tag error">errore ${c.exit_code}</span>`
+    : c.stderr ? '<span class="step-tag blocked">eseguito, con errori</span>'
+    : '<span class="step-tag ok">eseguito</span>';
+  const options = c.options.length
+    ? `<ul class="oracle-options">${c.options.map((o) =>
+      `<li><code>${escape(o.parte)}</code> ${escape(o.significato)}</li>`).join("")}</ul>` : "";
+  const output = c.blocked || c.unavailable ? `<p class="muted small">${escape(c.blocked || c.unavailable)}</p>`
+    : `<pre>${escape(c.output || "(nessun output)")}</pre>`;
+  return `<div class="oracle-cmd ${state}"><div class="oracle-line"><code>${escape(c.command)}</code>` +
+    `<span>${tag} <button data-command="${attr(c.command)}">Prova nel terminale</button></span></div>` +
+    `<p>${escape(c.explanation)}</p>${options}${output}</div>`;
+}
+
+function oracleAnswer(a) {
+  const source = a.source_ok
+    ? `<p class="oracle-source">Fonte: Debian Reference §${escape(a.source)} ${escape(a.source_title)}</p>`
+    : `<p class="oracle-source warn">Fonte citata (§${escape(a.source || "nessuna")}) non tra i passaggi trovati: ` +
+      "la spiegazione non è ancorata alla guida.</p>";
+  const commands = a.commands.length ? a.commands.map(oracleCommand).join("")
+    : '<p class="muted">Nessun comando proposto.</p>';
+  const explanation = a.explanation ? `<p class="oracle-explanation">${escape(a.explanation)}</p>` : "";
+  return `<div class="oracle-answer"><p class="tutor-question">${escape(a.question)}</p>${explanation}${commands}${source}` +
+    (a.note ? `<p class="muted small">${escape(a.note)}</p>` : "") +
+    `<p class="muted small">Modello ${escape(a.model)}, ${a.duration_s} s · registro: .breakfix/audit/${escape(a.audit)}</p></div>`;
+}
+
+async function askOracle(event) {
+  event.preventDefault();
+  const question = $("oracle-question").value.trim();
+  if (!question) return;
+  showError("");
+  $("oracle-send").disabled = true;
+  $("oracle-send").textContent = "L'Oracolo cerca e prova i comandi…";
+  try {
+    oracleAnswers.unshift(await api("/api/oracolo", "POST", { question }));
+    $("oracle-answers").innerHTML = oracleAnswers.map(oracleAnswer).join("");
+    $("oracle-question").value = "";
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    $("oracle-send").disabled = false;
+    $("oracle-send").textContent = "Chiedi";
+  }
+}
+
 // --- Terminale ---------------------------------------------------------------------
 
 const term = new Terminal({
@@ -688,6 +778,11 @@ function setTab(name) {
 
 function route() {
   const [part, number, step] = location.hash.replace(/^#\/?/, "").split("/");
+  if (part === "oracolo") {
+    setTab("oracolo");
+    showError("");
+    return openOracle();
+  }
   const kind = part === "challenge" ? "challenge" : "basi";
   setTab(kind);
   showError("");
@@ -719,6 +814,11 @@ $("tutor-question").onkeydown = (event) => {
 $("exercise-view").onclick = (event) => {
   const button = event.target.closest("button[data-command]");
   if (button) runInTerminal(button.dataset.command);
+};
+$("oracle-view").onclick = $("exercise-view").onclick;
+$("oracle-form").onsubmit = askOracle;
+$("oracle-question").onkeydown = (event) => {
+  if (event.key === "Enter" && !event.shiftKey) $("oracle-form").requestSubmit();
 };
 
 for (const [label, command] of FIRST_STEPS) {

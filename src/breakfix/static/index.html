@@ -12,6 +12,7 @@
     <h1>Sysadmin Shock</h1>
     <nav class="tabs">
       <a href="#/basi" data-tab="basi">Basi</a>
+      <a href="#/oracolo" data-tab="oracolo">Oracolo</a>
       <a href="#/challenge" data-tab="challenge">Challenge</a>
     </nav>
   </header>
@@ -75,6 +76,27 @@
         </details>
       </div>
 
+      <div id="oracle-view" hidden>
+        <h2>Oracolo</h2>
+        <p class="muted">Chiedi una cosa su Linux: come si fa, cos'è un comando, dove guardare quando qualcosa non va.
+          L'Oracolo cerca nella <b>Debian Reference</b> (GPL-2+) i passaggi che ne parlano, ti spiega l'argomento e
+          propone alcuni comandi con il significato delle opzioni. Dove può li mostra sui file qui sotto: il programma
+          li esegue nella sandbox e ti mostra l'output vero, così se un comando è sbagliato lo vedi. Poi provali nel
+          terminale e cambiali.</p>
+        <article class="card">
+          <p class="small"><b>I file</b> (sempre gli stessi, in <code>/srv/oracolo</code>):</p>
+          <ul id="oracle-files" class="oracle-files"></ul>
+        </article>
+        <form id="oracle-form" class="tutor-form">
+          <textarea id="oracle-question" rows="2" maxlength="500" required
+            placeholder="Es. cos'è awk? Come trovo gli errori del database nel log? Dove guardo se un servizio non parte?"></textarea>
+          <button id="oracle-send" class="primary">Chiedi</button>
+        </form>
+        <p class="muted small">L'Oracolo è un modello di AI: le spiegazioni possono contenere errori, l'output no.
+          Domanda e comandi vanno al modello e nel registro sul PC.</p>
+        <div id="oracle-answers" aria-live="polite"></div>
+      </div>
+
       <div id="hints"></div>
       <button id="next-hint"></button>
       <p id="man" class="muted small" hidden></p>
@@ -108,7 +130,7 @@
         </form>
       </details>
 
-      <div class="actions">
+      <div id="actions" class="actions">
         <button id="check" class="primary">Verifica</button>
         <a id="next" class="button" hidden></a>
         <a id="next-ticket" class="button" hidden></a>

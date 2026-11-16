@@ -529,3 +529,58 @@ class LlmApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OracleApiTest(unittest.TestCase):
+    """L'Oracolo dalla pagina: sandbox, guida e modello finti."""
+
+    def setUp(self) -> None:
+        from test_guide import sample_index
+        from test_oracolo import ANSWER, GREP, AWK, FakeBox, OracleModel
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.model = OracleModel(ANSWER)
+        self.box = FakeBox({GREP: (0, "25\n"), AWK: (0, "25\n")})
+        self.started = []
+        for patch in (
+            mock.patch.dict("os.environ", {"BREAKFIX_AUDIT_DIR": tmp.name}),
+            mock.patch.object(web, "_fixer", None),
+            mock.patch.object(web, "build_llm_client", side_effect=lambda: self.model),
+            mock.patch.object(web.oracolo, "start", lambda: self.started.append("oracolo")),
+            mock.patch.object(web.oracolo, "DockerSandbox", lambda: self.box),
+            mock.patch.object(web.oracolo, "load_index", sample_index),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.client = TestClient(web.app)
+
+    def _active(self, label: str | None):
+        return mock.patch("breakfix.sandbox.active_scenario", return_value=label)
+
+    def test_the_oracle_starts_its_sandbox_with_its_files(self) -> None:
+        view = self.client.post("/api/oracolo/start").json()
+        self.assertEqual(view["kind"], "oracolo")
+        self.assertIn("/srv/oracolo/app.log", [f["path"] for f in view["files"]])
+        self.assertEqual(self.started, ["oracolo"])
+        with self._active("oracolo"):
+            self.assertEqual(self.client.get("/api/active").json()["kind"], "oracolo")
+            # Niente da verificare, niente tutor né fixer: l'Oracolo non è un esercizio.
+            self.assertEqual(self.client.post("/api/check").status_code, 409)
+            self.assertEqual(self.client.post("/api/tutor", json={"question": "aiuto"}).status_code, 409)
+
+    def test_a_question_gets_commands_with_their_real_output(self) -> None:
+        with self._active("oracolo"):
+            answer = self.client.post("/api/oracolo", json={"question": "quanti errori nel log dello spazio su disco?"}).json()
+        self.assertEqual([c["output"] for c in answer["commands"][:2]], ["25", "25"])
+        self.assertIsNotNone(answer["commands"][2]["blocked"])
+        self.assertEqual((answer["source"], answer["source_ok"]), ("9.6.1", True))
+        self.assertTrue(answer["audit"].endswith(".json"))
+
+    def test_only_on_its_own_files_and_only_from_the_page(self) -> None:
+        with self._active("run-sh-noexec"):
+            self.assertEqual(self.client.post("/api/oracolo", json={"question": "errori?"}).status_code, 409)
+        with self._active("oracolo"):
+            self.assertEqual(self.client.post("/api/oracolo", json={"question": "x"}, headers=FOREIGN).status_code, 403)
+            self.assertEqual(self.client.post("/api/oracolo", json={"question": ""}).status_code, 422)
+        self.assertEqual(self.model.inputs, [])
