@@ -103,12 +103,16 @@
 
       <details id="llm" class="card" hidden>
         <summary>Modello AI: <span id="llm-current"></span></summary>
-        <p class="muted small">Il modello del tutor e di "Rilancia l'AI". Qui scegli provider e modello, non la
-          API key: quella resta nel file .env e non passa dalla pagina. La scelta vale finché l'app è accesa,
-          poi torna quella del .env; gli eval usano sempre il .env.</p>
+        <p class="muted small">Il modello del tutor e di "Rilancia l'AI". Qui scegli provider, modello e (per Ollama/vLLM) server e ragionamento,
+          non la API key: quella resta nel file .env e non passa dalla pagina. La scelta vale finché l'app è
+          accesa, poi torna quella del .env; gli eval usano sempre il .env.</p>
         <form id="llm-form" class="llm-form">
           <label>Provider <select id="llm-provider"></select></label>
-          <label>Modello <input id="llm-model" list="llm-models" autocomplete="off" spellcheck="false" maxlength="100"></label>
+          <label id="llm-url-label" class="llm-url">Server <input id="llm-url" autocomplete="off" spellcheck="false"
+            maxlength="200" title="URL completo (http://host:porta/v1) o solo la porta, sullo stesso host del .env"></label>
+          <label class="llm-model">Modello <input id="llm-model" list="llm-models" autocomplete="off" spellcheck="false" maxlength="100"></label>
+          <label id="llm-effort-label" class="llm-effort">Ragionamento <select id="llm-effort"
+            title="reasoning_effort: i valori accettati dipendono dal modello (es. qwen3.8-flash-next vuole xhigh, non high)"></select></label>
           <datalist id="llm-models"></datalist>
           <button id="llm-save">Usa questo modello</button>
         </form>

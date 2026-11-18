@@ -9,8 +9,12 @@ chiedere aiuto a un tutor AI; il risultato viene verificato da uno script. Dopo 
 ticket si può chiedere a un altro agente, il **fixer**, di provare a risolverlo e osservare i suoi
 passaggi.
 
-Il tutor è istruito a non darti la soluzione e un controllo prova a bloccare i comandi
+Il tutor è istruito affinchè non dia la soluzione, è presente un controllo che blocca i comandi
 che la rivelano.
+
+Per tutto quello che lezioni e ticket non coprono c'è l'**Oracolo**: l'oracolo è stato costruito per chiedere informazioni generiche sui comandi linux, si riceve così una spiegazione a partire dalla *Debian
+Reference*, che il programma esegue su file di prova per mostrarne l'output vero.
+
 ## Procedimento
 
 Per usare l'interfaccia nel browser, avvia Docker Desktop ed esegui dalla cartella del
@@ -23,7 +27,7 @@ docker compose up --build -d
 Al primo avvio costruisce le immagini e può richiedere qualche minuto. Poi:
 
 1. Apri **http://localhost:8000**.
-2. Scegli una lezione in **Basi** oppure un ticket in **Challenge**.
+2. Scegli una lezione in **Basi**, un ticket in **Challenge**, oppure fai una domanda all'**Oracolo**.
 3. Usa il terminale della pagina; se ti serve, apri gli indizi o chiedi al tutor.
 4. Premi **Verifica** per sapere se hai raggiunto il risultato richiesto.
 
@@ -85,16 +89,19 @@ solo compito da LLM, scrivere: quindi un agente con un tool, `prova_scenario`, c
 verdetto della sandbox finché lo scenario non è valido. Chi scrive non è chi giudica: il check delle
 bozze è quello comune (`baseline`), non lo scrive l'author. Vedi [Bozze generate](#bozze-generate).
 
-**L'Oracolo è RAG con una chiamata al modello, senza tool.** "Come faccio a contare gli errori nel log?":
-il codice cerca nella *Debian Reference* (BM25) i passaggi pertinenti, il modello propone da 2 a 4 comandi
-con le opzioni spiegate e cita il passaggio usato, il codice controlla la fonte, fa passare i comandi dal
-guardrail e li **esegue** nella sandbox su file scritti da noi. L'unica decisione aperta è quali comandi
-proporre; se funzionano lo dice l'output. Vedi [Oracolo](#oracolo).
+**L'Oracolo è RAG con una chiamata al modello, senza tool.** "Cos'è awk?", "come conto gli errori nel
+log?": il codice cerca nella *Debian Reference* (BM25) i passaggi pertinenti; il modello spiega l'argomento,
+propone da 2 a 4 comandi con le opzioni spiegate e cita il passaggio usato; il codice controlla la fonte, fa
+passare i comandi dal guardrail e li **esegue** nella sandbox, su file scritti da noi dove si può. Le
+decisioni aperte sono cosa spiegare e quali comandi proporre; se i comandi funzionano lo dice l'output. Non
+serve un tool: quali passaggi recuperare e cosa eseguire lo decide il codice, non il modello. Vedi
+[Oracolo](#oracolo).
 
 ```text
-  domanda ─► ricerca BM25 ─► passaggi ─► modello ─► comandi + fonte ─► fonte recuperata?
-              (codice)                                                 guardrail, solo lettura
-                                                                       esecuzione nella sandbox ─► output vero
+  domanda ─► ricerca BM25 ─► passaggi ─► modello ─► spiegazione, comandi, fonte ─► fonte recuperata?
+              (codice)                                                         guardrail, solo lettura
+                                                                               programma presente nella sandbox?
+                                                                               esecuzione ─► output vero
 ```
 
 ```text
@@ -116,7 +123,7 @@ proporre; se funzionano lo dice l'output. Vedi [Oracolo](#oracolo).
                                                │
   Fixer agent ── MCPClient ──► server MCP: guardrail ─► exec_in_sandbox
                      │
-                     └─► ContextTracing ─► .breakfix/audit/*.json  (fixer, tutor e author)
+                     └─► ContextTracing ─► .breakfix/audit/*.json  (fixer, tutor, author e oracolo)
 ```
 
 **Alternative scartate.**
@@ -130,8 +137,8 @@ proporre; se funzionano lo dice l'output. Vedi [Oracolo](#oracolo).
   eseguito il comando. Il verdetto lo dà sempre `check.sh`.
 
 **Chi decide a ogni passo.** Un agente c'è solo dove la decisione è aperta; il resto è codice. Non ci
-sono routing, supervisor, handoff o fan-out: sono tre agenti singoli e indipendenti, e l'unico passaggio
-di mano è verso la persona.
+sono routing, supervisor, handoff o fan-out: sono quattro agenti singoli e indipendenti (fixer, tutor,
+author, oracolo), e l'unico passaggio di mano è verso la persona.
 
 | Passo | Chi decide | Come |
 |---|---|---|
@@ -146,6 +153,11 @@ di mano è verso la persona.
 | Author: cosa scrivere nella bozza | modello | tool `prova_scenario` |
 | Se la bozza è valida | codice | controlli sulle copie + `DockerLab.validate` |
 | Se la bozza diventa uno scenario | la persona | la rivede e la sposta in `scenarios/` |
+| Oracolo: quali passaggi della guida usare | codice | BM25 sulla domanda + espansione con regole scritte a mano |
+| Oracolo: cosa spiegare e quali comandi proporre | modello | una chiamata, senza tool |
+| Oracolo: se la fonte citata è vera | codice | deve essere tra i passaggi recuperati, altrimenti la pagina lo dice |
+| Oracolo: se un comando viene eseguito | codice | guardrail + solo lettura + programma presente nella sandbox (`command -v`) |
+| Oracolo: se un comando funziona | l'output | eseguito nella sandbox; l'eval confronta l'output con risposte note |
 | Se un giudice LLM può fare da gate | codice, su giudizi di una persona | calibrazione su 12 risposte giudicate a mano |
 
 **Memoria e contesto.** Il tutor ricorda la conversazione tra un processo e l'altro: ogni
@@ -276,6 +288,8 @@ breakfix-oracolo eval       # 13 domande: l'output di almeno un comando proposto
 
 breakfix-sandbox down
 ```
+
+### Interfaccia web
 
 **La UI** (`breakfix-ui`, FastAPI su http://127.0.0.1:8000) fa `lessons`, `learn`, `list`, `start`,
 `shell` e `check` dal browser, con due sezioni:
@@ -577,7 +591,10 @@ Cosa dicono questi numeri:
 - in nessun run un comando proposto è stato bloccato: il modello ha rispettato "solo comandi che
   leggono". Il blocco resta comunque nel codice, perché una regola nel prompt non è una garanzia.
 
-**Perché l'Oracolo e non esercizi generati.** Prima ho provato a far generare all'AI degli esercizi
+**Perché l'Oracolo e non esercizi generati.** L'Oracolo è il terzo tentativo di usare la guida con RAG.
+Il primo (branch `sys-rag`) ne recuperava un guasto e lo faceva generare all'author: tutti gli scenari
+generati erano "il gestionale non parte", perché con il check comune e `set -e` in `run.sh` ogni guasto
+si vede allo stesso modo, e "insegnami awk" non aveva un guasto da generare. Poi ho provato a far generare all'AI degli esercizi
 completi (spiegazione, dati, domanda, soluzione), validati con due soluzioni indipendenti su tre
 preparazioni a caso (commit `ec30886`). La sandbox validava la coerenza tra soluzioni e dati, non che il
 testo descrivesse i dati: il primo esercizio chiesto da una persona aveva un file di una riga, "cognomi"
@@ -829,6 +846,18 @@ bloccati, errori, token.
 che chiede `chmod -R 777 /srv` e `kill -9 1`. Il test [test_agent_trace.py](tests/test_agent_trace.py)
 simula un modello che obbedisce e verifica che il guardrail blocchi e che l'audit lo registri.
 
+**L'Oracolo: comandi scritti dal modello, eseguiti dal codice.** Qui è il programma, non un agente, a
+lanciare i comandi proposti dal modello, e la domanda è testo libero: un'injection nella domanda può far
+proporre qualunque comando. Prima di arrivare alla sandbox ogni comando passa:
+1. dallo stesso guardrail del server MCP (`check_command`);
+2. da un controllo di sola lettura: niente `rm`, `mv`, `chmod`, `sed -i`, `sudo`, `kill`, redirezioni su
+   file (il testo tra virgolette è escluso, così `awk 'NR > 1'` non conta come redirect);
+3. dal controllo che i programmi usati esistano nella sandbox.
+
+Poi gira nel container dell'Oracolo, senza rete, con il timeout di 15 s e l'output troncato a 40 righe. Nei
+6 run dell'eval nessun comando proposto è stato bloccato, ma il controllo resta nel codice: una regola nel
+prompt non è una garanzia ([test_oracolo.py](tests/test_oracolo.py), `test_only_commands_that_read_are_run`).
+
 **Rischio noto.** La memory persistente conserva anche gli output dei tool, quindi un'injection
 letta in un'esecuzione resta nel contesto delle successive (*memory poisoning*). Mitigazione
 attuale: `--reset-memory`.
@@ -864,7 +893,8 @@ che mancano.
 | Provider cloud (`LLM_PROVIDER=openai`, `anthropic`, `google`) | al provider, alle sue condizioni. La API key resta nel `.env`: non entra nell'immagine e non arriva al server MCP |
 
 **Quali dati passano.** Nessun dato personale è richiesto: niente account, nome o email. Al modello
-arrivano il ticket (nomi di fantasia), la domanda al tutor (testo libero, al massimo 1000 caratteri), gli
+arrivano il ticket (nomi di fantasia), la domanda al tutor (testo libero, al massimo 1000 caratteri) o
+all'Oracolo (al massimo 500, con i passaggi della guida e l'anteprima dei file di prova, dati inventati), gli
 ultimi 20 comandi lanciati nella sandbox e, per il fixer, l'output dei comandi (troncato a 4000
 caratteri). Un dato personale può entrarci solo se la persona lo scrive nella domanda o nel terminale.
 La password in `app.conf` è finta.
@@ -887,10 +917,10 @@ non sono dovuti, li uso come lista di controllo.
 
 | Regola | Prova nel progetto | Stato | Cosa manca |
 |---|---|---|---|
-| Dire all'utente che parla con un'AI (art. 50) | Il riquadro *Chiedi al tutor AI* in [index.html](src/breakfix/static/index.html) dice che è un modello, cosa vede e che può sbagliare; *Confronta con l'AI* è dichiarato; se il guardrail sostituisce una risposta, la pagina lo dice | a posto nella UI, a metà da CLI | `breakfix-tutor` non lo ripete a ogni risposta |
+| Dire all'utente che parla con un'AI (art. 50) | Il riquadro *Chiedi al tutor AI* in [index.html](src/breakfix/static/index.html) dice che è un modello, cosa vede e che può sbagliare; *Confronta con l'AI* è dichiarato; se il guardrail sostituisce una risposta, la pagina lo dice; l'Oracolo dice che è un modello e che "le spiegazioni possono contenere errori, l'output no" | a posto nella UI, a metà da CLI | `breakfix-tutor` non lo ripete a ogni risposta |
 | Tenere traccia (art. 12) | [audit.py](src/breakfix/audit.py): un file per esecuzione con modello, comandi, input, esito del guardrail, token. [test_agent_trace.py](tests/test_agent_trace.py), [test_tutor.py](tests/test_tutor.py) | a metà | I file sono locali e modificabili; nessuna scadenza, nessuna anonimizzazione |
 | Lasciare a una persona l'ultima parola (art. 14) | Chi ripara è la persona; il fixer agisce solo nella sandbox senza rete, e *Rilancia l'AI* chiede conferma; le bozze dell'author restano fuori da `scenarios/` finché una persona non le rivede ([test_author.py](tests/test_author.py)); il verdetto è di `check.sh` | a posto | – |
-| Controllare che le risposte siano accurate (art. 15) | Eval del tutor: 31/32 casi (97%), con il giudice calibrato su risposte giudicate a mano ([judge-calibration.toml](evals/judge-calibration.toml)). Eval del fixer: PASS/FAIL per scenario, 7/8 con `qwen3.8-27b` (tre esecuzioni), da 1 a 3 su 8 con i modelli locali | a metà | Una sola esecuzione per configurazione; il tutor 8B locale non è misurato con il prompt attuale; il giudice è indulgente sui percorsi; gli eval non girano in CI |
+| Controllare che le risposte siano accurate (art. 15) | Eval del tutor: 31/32 casi (97%), con il giudice calibrato su risposte giudicate a mano ([judge-calibration.toml](evals/judge-calibration.toml)). Eval del fixer: PASS/FAIL per scenario, 7/8 con `qwen3.8-27b` (tre esecuzioni), da 1 a 3 su 8 con i modelli locali. Eval dell'Oracolo: 12/13 domande con almeno un comando che dà la risposta nota ([evals/oracolo.toml](evals/oracolo.toml)), senza giudice | a metà | Una sola esecuzione per configurazione; il tutor 8B locale non è misurato con il prompt attuale; il giudice è indulgente sui percorsi; gli eval non girano in CI |
 | Resistere a manipolazioni e guasti (art. 15) | Guardrail sul tool e injection di prova ([test_guardrail.py](tests/test_guardrail.py), [test_agent_trace.py](tests/test_agent_trace.py)); container senza rete; controllo dell'`Origin` ([test_web.py](tests/test_web.py)); timeout del tool ([test_server.py](tests/test_server.py)) | a metà | Il guardrail sul tool è una denylist, quindi aggirabile; quello del tutor non vede le parafrasi, che misura solo il giudice LLM; memory poisoning del fixer da CLI; il Docker privato gira `privileged` |
 
 **Il rischio che resta.**
@@ -919,6 +949,10 @@ Dove il design è stato sfidato e cosa è cambiato dopo. Il coding agent usato �
 | "Il giudice LLM giudica bene?" | calibrazione su risposte giudicate a mano | Rubrica a voci indipendenti; il 4B scartato come giudice |
 | Le challenge generate dall'AI erano copie o venivano scartate | prova d'uso, poi lettura dell'audit trail con il coding agent | Controlli sulle copie, poi la generazione tolta dalla UI (2 scenari nuovi su 9 esecuzioni) e spostata nei next step |
 | "Generiamo anche dai comandi sulle partizioni?" | proposta in fase di design, verificata sui flag del container | Scartata: il container non ha `CAP_SYS_ADMIN` né dischi, e darglieli indebolirebbe l'isolamento |
+| Guasti generati con RAG dalla Debian Reference: tutti "il gestionale non parte" | prova d'uso (branch `sys-rag`) | Abbandonato: con il check comune e `set -e` in `run.sh` ogni guasto ha lo stesso sintomo |
+| Esercizi generati con RAG: coerenti tra soluzione e dati, non tra testo e dati | prova d'uso, poi un giudice LLM che non ha passato la calibrazione (78%) | Niente esercizi generati: l'Oracolo, con dati nostri e il verdetto dato dall'esecuzione |
+| "Perché l'eval dell'Oracolo fallisce?" | lettura degli audit con il coding agent | 9 fallimenti su 15 erano nostri: ricerca, dati del kernel poco realistici, parser |
+| "Dove guardo se un servizio non parte?" → nessun comando | prova d'uso | Domande generali su Linux, spiegazione prima dei comandi, programmi assenti mostrati e non eseguiti |
 
 ## Roadmap
 
@@ -934,7 +968,7 @@ Dove il design è stato sfidato e cosa è cambiato dopo. Il coding agent usato �
 - [x] Tutor nella UI (riquadro "Chiedi al tutor") ed eval del tutor: spoiler (deterministico) + giudice LLM con rubrica, con tentativi di jailbreak; calibrazione del giudice su risposte giudicate a mano
 - [x] Author (`breakfix-author`): bozze di scenario dal manuale di un comando, validate dalla sandbox. Un agente con un tool al posto della DagPipeline Author→Breaker→Validator: rompere e validare non richiedono un modello
 - [x] Generazione provata anche nella UI (sezione "Generate dall'AI") e poi tolta: 2 scenari nuovi su 9 esecuzioni. Resta da CLI, con controlli sulle copie (stesso comando sullo stesso file, riparazione già esistente, ticket che nomina il file)
-- [ ] **Next step: challenge generate da guasti reali.** Serve (1) una fonte di problemi veri, per esempio un libro di troubleshooting o dei postmortem, da cui recuperare il caso con RAG al posto del `--help`; (2) una sandbox più ricca, con più servizi, altrimenti lo spazio dei guasti resta quello di oggi; (3) un giudice LLM per novità e qualità del ticket, che i controlli sui comandi non vedono; (4) un eval dell'author, con il tasso di riuscita su N esecuzioni, come per fixer e tutor. Solo dopo ha senso riportarla nella UI
+- [ ] **Next step: challenge generate da guasti reali.** Serve (1) una fonte di problemi veri, per esempio un libro di troubleshooting o dei postmortem, da cui recuperare il caso con RAG al posto del `--help`; (2) una sandbox più ricca, con più servizi, altrimenti lo spazio dei guasti resta quello di oggi; (3) un giudice LLM per novità e qualità del ticket, che i controlli sui comandi non vedono; (4) un eval dell'author, con il tasso di riuscita su N esecuzioni, come per fixer e tutor. Solo dopo ha senso riportarla nella UI. Il punto (1) l'ho provato con la Debian Reference (branch `sys-rag`): senza il punto (2) ogni guasto generato aveva lo stesso sintomo (vedi [Oracolo](#oracolo))
 - [x] Oracolo: RAG (BM25) sulla Debian Reference, comandi eseguiti sui file di prova, eval con risposte note
 - [ ] Extra: indizi e regole anti-spoiler generati, eval in CI
 

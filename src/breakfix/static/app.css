@@ -318,7 +318,9 @@ code {
 #llm { margin: 10px 0; }
 .llm-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
 .llm-form label { display: flex; flex-direction: column; gap: 4px; font: 13px var(--mono); color: var(--label); }
-.llm-form label:nth-child(2) { flex: 1; min-width: 160px; }
+.llm-form .llm-model { flex: 1; min-width: 160px; }
+.llm-form .llm-url { flex: 1; min-width: 220px; }
+.llm-form .llm-url[hidden], .llm-form .llm-effort[hidden] { display: none; }
 .llm-form select, .llm-form input {
   font: 14px var(--mono);
   padding: 6px 10px;

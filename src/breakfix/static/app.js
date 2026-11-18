@@ -378,14 +378,43 @@ let llm = null;
 function renderLlm(settings) {
   llm = settings;
   const label = (id) => llm.providers.find((p) => p.id === id)?.label || id;
-  $("llm-current").textContent = `${label(llm.provider)}, ${llm.model || "modello non indicato"}` +
+  // Per Ollama/vLLM anche il ragionamento: cambia molto i tempi (qwen3:8b su CPU: 5 s o 30 s).
+  const effort = llm.reasoning_effort ?? llm.env?.reasoning_effort ?? "";
+  const reasoning = llm.provider === "ollama" ? `, ragionamento ${effort || "non inviato"}` : "";
+  $("llm-current").textContent = `${label(llm.provider)}, ${llm.model || "modello non indicato"}${reasoning}` +
     (llm.chosen ? " (scelto qui)" : " (dal .env)");
   $("llm-provider").innerHTML = llm.providers.map((p) =>
     `<option value="${attr(p.id)}"${p.unavailable ? " disabled" : ""}${p.id === llm.provider ? " selected" : ""}>` +
     `${escape(p.label)}${p.unavailable ? ` (${escape(p.unavailable)})` : ""}</option>`).join("");
   setModel(llm.model || "");
+  $("llm-url").value = llm.base_url || "";
+  $("llm-url").placeholder = llm.env?.base_url || "";
+  renderEffort();
+  showServer();
   showModels();
   showDestination();
+}
+
+// reasoning_effort: "env" segue il .env (null all'API), "" non lo invia, gli altri sono il valore.
+function renderEffort() {
+  const envEffort = llm.env?.reasoning_effort;
+  const options = [["env", `come nel .env (${envEffort || "non inviato"})`], ["", "non inviato (decide il modello)"],
+    ...(llm.reasoning_efforts || []).map((e) => [e, e])];
+  const current = llm.reasoning_effort ?? "env";
+  $("llm-effort").innerHTML = options.map(([value, label]) =>
+    `<option value="${attr(value)}"${value === current ? " selected" : ""}>${escape(label)}</option>`).join("");
+}
+
+function currentEffort() {
+  const value = $("llm-effort").value;
+  return value === "env" ? null : value;
+}
+
+// Server e ragionamento si scelgono solo per Ollama/vLLM: i provider cloud hanno i loro.
+function showServer() {
+  const hidden = $("llm-provider").value !== "ollama";
+  $("llm-url-label").hidden = hidden;
+  $("llm-effort-label").hidden = hidden;
 }
 
 // I suggerimenti del campo Modello: per Ollama/vLLM i modelli del server, per i cloud il default.
@@ -443,7 +472,13 @@ async function chooseLlm(event) {
   $("llm-save").disabled = true;
   showError("");
   try {
-    renderLlm(await api("/api/llm", "POST", { provider: $("llm-provider").value, model: currentModel() }));
+    const provider = $("llm-provider").value;
+    const ollama = provider === "ollama";
+    renderLlm(await api("/api/llm", "POST", {
+      provider, model: currentModel(),
+      base_url: ollama ? $("llm-url").value.trim() : "",
+      reasoning_effort: ollama ? currentEffort() : null,
+    }));
   } catch (error) {
     showError(error.message);
   } finally {
@@ -457,6 +492,7 @@ function changeProvider() {
   const provider = llm.providers.find((p) => p.id === id);
   setModel(id === llm.provider ? llm.model || "" : provider?.default_model || "");
   $("llm-model").placeholder = provider?.default_model ? "" : "nome del modello";
+  showServer();
   showModels();
   showDestination();
 }

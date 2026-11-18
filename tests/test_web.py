@@ -487,7 +487,7 @@ class LlmApiTest(unittest.TestCase):
                              "qwen3.8-27b")
             settings = self.client.post("/api/llm", json={"provider": "ollama"}).json()
             self.assertEqual(settings["model"], "qwen3.8-27b")
-            self.assertEqual(settings["destination"], "al server 10.0.0.5")
+            self.assertEqual(settings["destination"], "al server 10.0.0.5:8000")
             self.assertEqual(web._llm_client("tutor").base_url, "http://10.0.0.5:8000/v1")
 
     def test_the_api_key_never_reaches_the_page(self) -> None:
@@ -517,7 +517,77 @@ class LlmApiTest(unittest.TestCase):
             with self.subTest(failure), mock.patch.object(
                     web, "urlopen", **({"side_effect": failure} if isinstance(failure, Exception)
                                        else {"return_value": failure})):
-                self.assertEqual(self.real_served_models(), [])
+                self.assertIsNone(self.real_served_models())
+
+    def test_the_server_can_be_chosen_by_port(self) -> None:
+        # Un gateway con un modello per porta: basta la porta, l'host resta quello del .env.
+        with mock.patch.dict("os.environ", {"OLLAMA_BASE_URL": "http://10.0.0.5:8001/v1"}):
+            settings = self.client.post("/api/llm", json={"provider": "ollama", "model": "qwen3.8-flash-next",
+                                                          "base_url": "8002"}).json()
+            self.assertEqual(settings["base_url"], "http://10.0.0.5:8002/v1")
+            self.assertEqual(settings["env"]["base_url"], "http://10.0.0.5:8001/v1")
+            self.assertEqual(settings["destination"], "al server 10.0.0.5:8002")
+            self.assertEqual(web._llm_client("tutor").base_url, "http://10.0.0.5:8002/v1")
+            # I suggerimenti del campo Modello vengono dal server scelto, non da quello del .env.
+            self.assertEqual(web._base_url(), "http://10.0.0.5:8002/v1")
+            # Lo stesso server del .env non si memorizza: vale il .env.
+            self.client.post("/api/llm", json={"provider": "ollama", "model": "m", "base_url": "8001"})
+            self.assertIsNone(web._llm_choice[2])
+
+    def test_a_full_server_url_gets_v1(self) -> None:
+        settings = self.client.post("/api/llm", json={"provider": "ollama", "model": "m",
+                                                      "base_url": " http://gpu.lan:9000/ "}).json()
+        self.assertEqual(settings["base_url"], "http://gpu.lan:9000/v1")
+        self.served.assert_any_call("http://gpu.lan:9000/v1")
+
+    def test_a_server_that_does_not_answer_is_refused(self) -> None:
+        self.served.return_value = None
+        response = self.client.post("/api/llm", json={"provider": "ollama", "model": "m", "base_url": "8002"})
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("non risponde", response.json()["detail"])
+        self.assertIsNone(web._llm_choice)
+
+    def test_bad_servers_are_rejected(self) -> None:
+        for url in ("ftp://h/v1", "http://user:pw@h/v1", "http://h:99999/v1", "99999", "0", "localhost",
+                    "http://h/v1?x=1", "javascript:alert(1)"):
+            with self.subTest(url):
+                response = self.client.post("/api/llm", json={"provider": "ollama", "model": "m", "base_url": url})
+                self.assertEqual(response.status_code, 422)
+        self.assertIsNone(web._llm_choice)
+
+    def test_the_server_is_only_for_ollama(self) -> None:
+        self.client.post("/api/llm", json={"provider": "openai", "base_url": "http://evil.example/v1"})
+        self.assertEqual(web._llm_choice, ("openai", "gpt-5.6-luna", None, None))
+        self.assertNotIn(mock.call("http://evil.example/v1"), self.served.call_args_list)
+
+    def test_the_reasoning_effort_can_be_chosen(self) -> None:
+        from breakfix.agent import generation_kwargs
+
+        with mock.patch.dict("os.environ", {"LLM_REASONING_EFFORT": "none"}):
+            settings = self.client.get("/api/llm").json()
+            self.assertIsNone(settings["reasoning_effort"])
+            self.assertEqual(settings["env"]["reasoning_effort"], "none")
+            self.assertIn("xhigh", settings["reasoning_efforts"])
+            # null segue il .env, un valore lo sostituisce, "" non lo invia proprio.
+            for chosen, sent in ((None, "none"), ("xhigh", "xhigh"), (" Low ", "low"), ("", None)):
+                with self.subTest(chosen):
+                    settings = self.client.post("/api/llm", json={"provider": "ollama", "model": "m",
+                                                                  "reasoning_effort": chosen}).json()
+                    self.assertEqual(settings["reasoning_effort"], chosen.strip().lower() if chosen else chosen)
+                    kwargs = generation_kwargs(web._llm_client("tutor"))
+                    self.assertEqual(kwargs.get("reasoning_effort"), sent)
+
+    def test_a_bad_reasoning_effort_is_rejected(self) -> None:
+        for effort in ("high; rm", "x" * 17, "élevé"):
+            with self.subTest(effort):
+                response = self.client.post("/api/llm", json={"provider": "ollama", "model": "m",
+                                                              "reasoning_effort": effort})
+                self.assertEqual(response.status_code, 422)
+        self.assertIsNone(web._llm_choice)
+
+    def test_the_reasoning_effort_is_only_for_ollama(self) -> None:
+        self.client.post("/api/llm", json={"provider": "openai", "reasoning_effort": "high"})
+        self.assertIsNone(web._llm_choice.reasoning_effort)
 
     def test_bad_requests_are_rejected(self) -> None:
         for body in ({"provider": "mistral"}, {"provider": "ollama", "model": "qwen; rm -rf /"}):
