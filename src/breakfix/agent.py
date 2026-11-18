@@ -85,6 +85,10 @@ NUDGE = ("Non hai ancora concluso: hai scritto il prossimo passo senza eseguirlo
 MAX_OUTPUT_TOKENS = 16000
 
 
+# L'attributo con cui un client si porta il suo reasoning_effort (vedi build_llm_client).
+REASONING_EFFORT_ATTR = "breakfix_reasoning_effort"
+
+
 def generation_kwargs(client: Client | None = None) -> dict:
     """Parametri di generazione passati al client a ogni chiamata del modello."""
     kwargs = {"max_tokens": MAX_OUTPUT_TOKENS}
@@ -92,14 +96,30 @@ def generation_kwargs(client: Client | None = None) -> dict:
     # risposta (su CPU 37 s invece di 5 s per una riga). Vale solo per Ollama/vLLM (chat completions):
     # il client OpenAI usa la Responses API, che rifiuta reasoning_effort, e gli altri non lo conoscono.
     # Serve da quando il provider si sceglie nella pagina: il .env resta quello pensato per Ollama.
-    effort = os.getenv("LLM_REASONING_EFFORT")
+    # Il client può portarsi il suo (scelto nella pagina); "" vuol dire non inviarlo, decide il modello.
+    effort = getattr(client, REASONING_EFFORT_ATTR, None)
+    if effort is None:
+        effort = os.getenv("LLM_REASONING_EFFORT")
     if effort and (client is None or isinstance(client, OpenAILikeClient)):
         kwargs["reasoning_effort"] = effort
     return kwargs
 
 
-def build_llm_client(provider: str | None = None, model: str | None = None):
-    """Il client del modello: da LLM_PROVIDER / LLM_MODEL, oppure da argomenti (es. il giudice degli eval)."""
+def build_llm_client(provider: str | None = None, model: str | None = None, base_url: str | None = None,
+                     reasoning_effort: str | None = None):
+    """Il client del modello: da LLM_PROVIDER / LLM_MODEL, oppure da argomenti (es. il giudice degli eval).
+
+    base_url e reasoning_effort valgono solo per Ollama/vLLM e sostituiscono OLLAMA_BASE_URL e
+    LLM_REASONING_EFFORT (es. quelli scelti nella pagina). reasoning_effort "" = non inviarlo.
+    """
+    client = _build_llm_client(provider, model, base_url)
+    if reasoning_effort is not None:
+        # Il client va ovunque (tutor, Oracolo, fixer): così generation_kwargs lo trova senza altri argomenti.
+        setattr(client, REASONING_EFFORT_ATTR, reasoning_effort)
+    return client
+
+
+def _build_llm_client(provider: str | None, model: str | None, base_url: str | None):
     if provider is None:
         provider, model = os.getenv("LLM_PROVIDER", "openai"), model or os.getenv("LLM_MODEL")
     provider = provider.lower()
@@ -115,7 +135,7 @@ def build_llm_client(provider: str | None = None, model: str | None = None):
             api_key="ollama",
             model=model,
             temperature=temperature,
-            base_url=os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL),
+            base_url=base_url or os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL),
         )
     key_var = API_KEY_VARS.get(provider, "LLM_API_KEY")
     api_key = os.getenv(key_var) or os.getenv("LLM_API_KEY")

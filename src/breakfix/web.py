@@ -41,7 +41,7 @@ import webbrowser
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
@@ -427,25 +427,80 @@ def tutor_conversation() -> list[dict[str, Any]]:
 
 # --- Il modello di tutor e fixer: dal .env, oppure scelto nella pagina ---------------------------
 #
-# La pagina sceglie provider e modello, mai la API key: quella resta nel .env (non passa dal browser
-# e non finisce nei log). La scelta vale finché l'app è accesa; al riavvio torna quella del .env.
-# Gli eval e la CLI usano sempre il .env, così i numeri del README restano riproducibili.
+# La pagina sceglie provider e modello (e, per Ollama/vLLM, il server), mai la API key: quella resta
+# nel .env (non passa dal browser e non finisce nei log). La scelta vale finché l'app è accesa; al
+# riavvio torna quella del .env. Gli eval e la CLI usano sempre il .env, così i numeri del README
+# restano riproducibili.
 
 PROVIDERS = {"ollama": "Ollama o vLLM", "openai": "OpenAI", "anthropic": "Anthropic"}
 CLIENT_MODULES = {"openai": "datapizza.clients.openai", "anthropic": "datapizza.clients.anthropic"}
 MODEL_NAME = re.compile(r"[\w.:/@-]{1,100}")
 
-_llm_choice: tuple[str, str] | None = None  # (provider, modello) scelti nella pagina
+# Proposti nel menu "Ragionamento". Quali valgono dipende dal modello (qwen3.8-flash-next rifiuta
+# "high" e accetta "xhigh"): un valore sbagliato torna come errore 400 alla prima domanda.
+REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh")
+REASONING_EFFORT = re.compile(r"[a-z]{1,16}")
+
+
+class LlmChoice(NamedTuple):
+    """Scelti nella pagina, nell'ordine degli argomenti di build_llm_client. Solo per Ollama/vLLM:
+    base_url None = quello del .env; reasoning_effort None = quello del .env, "" = non inviarlo."""
+    provider: str
+    model: str
+    base_url: str | None = None
+    reasoning_effort: str | None = None
+
+
+_llm_choice: LlmChoice | None = None
 
 
 class LlmRequest(BaseModel):
     provider: str
     model: str = Field(default="", max_length=100)
+    base_url: str = Field(default="", max_length=200)  # solo Ollama/vLLM; vuoto = quello del .env
+    # Solo Ollama/vLLM: null = quello del .env, "" = non inviarlo (decide il modello)
+    reasoning_effort: str | None = Field(default=None, max_length=16)
 
 
 def _env_llm() -> tuple[str, str | None]:
     provider = os.getenv("LLM_PROVIDER", "openai").lower()
     return provider, os.getenv("LLM_MODEL") or DEFAULT_MODELS.get(provider)
+
+
+def _env_base_url() -> str:
+    return os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL).rstrip("/")
+
+
+def _base_url() -> str:
+    """Il server Ollama/vLLM in uso: quello scelto nella pagina, o quello del .env."""
+    return (_llm_choice.base_url if _llm_choice else None) or _env_base_url()
+
+
+def _reasoning_effort() -> str:
+    """Il reasoning_effort inviato a Ollama/vLLM: quello scelto nella pagina, o quello del .env ("" = nessuno)."""
+    chosen = _llm_choice.reasoning_effort if _llm_choice else None
+    return chosen if chosen is not None else os.getenv("LLM_REASONING_EFFORT", "")
+
+
+def _parse_base_url(text: str) -> str:
+    """Il server scritto nella pagina, come URL completo. Solo la porta (es. "8002") cambia la porta
+    del server del .env: è il caso tipico di un gateway con un modello per porta."""
+    text = text.strip().rstrip("/")
+    if text.isdigit():
+        if not 0 < int(text) < 65536:
+            raise ValueError("porta fuori intervallo")
+        env = urlsplit(_env_base_url())
+        if not env.hostname:
+            raise ValueError("nel .env OLLAMA_BASE_URL non ha un host a cui cambiare la porta")
+        host = f"[{env.hostname}]" if ":" in env.hostname else env.hostname
+        return env._replace(netloc=f"{host}:{text}").geturl()
+    parts = urlsplit(text)
+    # Niente credenziali, query o frammenti: il campo indica solo dove sta il server.
+    if parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.query \
+            or parts.fragment:
+        raise ValueError("scrivi un URL come http://192.168.1.42:8002/v1, o solo la porta")
+    parts.port  # solleva ValueError se la porta non è un numero valido
+    return parts._replace(path=parts.path or "/v1").geturl()
 
 
 def _unavailable(provider: str) -> str | None:
@@ -464,35 +519,38 @@ def _destination(provider: str) -> str:
     """Dove vanno domanda e comandi con questo provider: lo dice la pagina, prima di scegliere."""
     if provider != "ollama":
         return f"al provider cloud {PROVIDERS[provider]}: domanda e comandi escono dal PC"
-    host = urlsplit(os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL)).hostname or "?"
+    parts = urlsplit(_base_url())
+    host = parts.hostname or "?"
     local = host in ("localhost", "127.0.0.1", "host.docker.internal")
-    return "al modello locale, sul PC" if local else f"al server {host}"
+    port = f":{parts.port}" if parts.port else ""
+    return f"al modello locale, sul PC{f' (porta {parts.port})' if parts.port else ''}" if local \
+        else f"al server {host}{port}"
 
 
-def _served_models() -> list[str]:
-    """I modelli che il server Ollama/vLLM ha davvero (GET /v1/models), o [] se non risponde.
+def _served_models(base_url: str | None = None) -> list[str] | None:
+    """I modelli che il server Ollama/vLLM ha davvero (GET /v1/models), o None se non risponde.
 
     Solo per Ollama/vLLM: è in rete locale e non chiede una chiave. Ai provider cloud non si chiede
     l'elenco: sarebbe una chiamata autenticata, e lenta, a ogni apertura del riquadro.
     """
-    url = os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL).rstrip("/") + "/models"
+    url = (base_url or _base_url()).rstrip("/") + "/models"
     try:
         with urlopen(url, timeout=2) as response:
             data = json.load(response).get("data", [])
         return sorted({m["id"] for m in data if isinstance(m, dict) and isinstance(m.get("id"), str)})
     except (OSError, ValueError, AttributeError):  # server spento, URL sbagliato, risposta non JSON
-        return []
+        return None
 
 
 def _suggestions(provider: str, *known: str | None) -> list[str]:
     """I modelli proposti nel menu del campo Modello: il campo resta libero, sono solo suggerimenti."""
-    served = _served_models() if provider == "ollama" else []
+    served = (_served_models() or []) if provider == "ollama" else []
     return list(dict.fromkeys(m for m in (*known, *served) if m))
 
 
 def llm_view() -> dict[str, Any]:
     env_provider, env_model = _env_llm()
-    provider, model = _llm_choice or (env_provider, env_model)
+    provider, model = _llm_choice[:2] if _llm_choice else (env_provider, env_model)
     providers = []
     for p, label in PROVIDERS.items():
         # Il modello proposto per il provider del .env è quello del .env: il default del codice
@@ -503,7 +561,12 @@ def llm_view() -> dict[str, Any]:
                           "unavailable": _unavailable(p), "destination": _destination(p)})
     return {
         "provider": provider, "model": model, "chosen": _llm_choice is not None,
-        "env": {"provider": env_provider, "model": env_model},
+        "base_url": _base_url(),
+        # null = segue il .env; "" = non inviato
+        "reasoning_effort": _llm_choice.reasoning_effort if _llm_choice else None,
+        "reasoning_efforts": list(REASONING_EFFORTS),
+        "env": {"provider": env_provider, "model": env_model, "base_url": _env_base_url(),
+                "reasoning_effort": os.getenv("LLM_REASONING_EFFORT", "")},
         "destination": _destination(provider) if provider in PROVIDERS else "",
         "providers": providers,
     }
@@ -527,11 +590,25 @@ def choose_llm(request: LlmRequest) -> dict[str, Any]:
         model = (env_model if provider == env_provider else None) or DEFAULT_MODELS.get(provider) or ""
     if not MODEL_NAME.fullmatch(model):
         raise HTTPException(422, "indica il nome del modello (lettere, cifre e . : / @ - _)")
+    base_url = None
+    if provider == "ollama" and request.base_url.strip():
+        try:
+            base_url = _parse_base_url(request.base_url)
+        except ValueError as exc:
+            raise HTTPException(422, f"server non valido: {exc}") from exc
+        if base_url == _env_base_url():
+            base_url = None  # è quello del .env: se il .env cambia, si segue il .env
+        # Un server scritto a mano si controlla subito: meglio qui che un 503 alla prima domanda.
+        elif _served_models(base_url) is None:
+            raise HTTPException(422, f"il server {base_url} non risponde su /models: controlla indirizzo e porta")
+    effort = request.reasoning_effort.strip().lower() if provider == "ollama" and request.reasoning_effort is not None         else None
+    if effort and not REASONING_EFFORT.fullmatch(effort):
+        raise HTTPException(422, "ragionamento non valido: scegli none, low, medium, high, xhigh")
     try:  # costruire il client non chiama il modello: controlla solo che la configurazione regga
-        build_llm_client(provider, model)
+        build_llm_client(provider, model, base_url, effort)
     except (SystemExit, ImportError, ValueError) as exc:
         raise HTTPException(422, f"modello non utilizzabile: {getattr(exc, 'code', None) or exc}") from exc
-    _llm_choice = (provider, model)
+    _llm_choice = LlmChoice(provider, model, base_url, effort)
     return llm_view()
 
 

@@ -35,6 +35,14 @@ class OllamaClientTest(unittest.TestCase):
         self.assertEqual(client.model_name, "qwen3:8b")
         self.assertEqual(client.base_url, "http://ollama:11434/v1")
 
+    def test_the_url_argument_wins_over_the_env(self) -> None:
+        # Il server scelto nella pagina: vale per quel client, il .env resta com'è.
+        with llm_env(LLM_PROVIDER="ollama", OLLAMA_BASE_URL="http://ollama:11434/v1"):
+            client = build_llm_client("ollama", "qwen3.8-flash-next", "http://10.0.0.5:8002/v1")
+            self.assertEqual(build_llm_client().base_url, "http://ollama:11434/v1")
+
+        self.assertEqual(client.base_url, "http://10.0.0.5:8002/v1")
+
 
 class GenerationKwargsTest(unittest.TestCase):
     def test_reasoning_effort_only_when_set(self) -> None:
@@ -50,6 +58,15 @@ class GenerationKwargsTest(unittest.TestCase):
             self.assertEqual(generation_kwargs(build_llm_client("ollama", "qwen3:8b"))["reasoning_effort"], "none")
             self.assertEqual(generation_kwargs(build_llm_client("openai", "gpt-5.6-luna")),
                              {"max_tokens": MAX_OUTPUT_TOKENS})
+
+
+    def test_the_client_can_carry_its_own_effort(self) -> None:
+        # Quello scelto nella pagina vince sul .env; "" vuol dire non inviarlo.
+        with llm_env(LLM_REASONING_EFFORT="none"):
+            self.assertEqual(generation_kwargs(build_llm_client("ollama", "m", None, "xhigh"))["reasoning_effort"],
+                             "xhigh")
+            self.assertNotIn("reasoning_effort", generation_kwargs(build_llm_client("ollama", "m", None, "")))
+            self.assertEqual(generation_kwargs(build_llm_client("ollama", "m"))["reasoning_effort"], "none")
 
 
 class SettingsTest(unittest.TestCase):
