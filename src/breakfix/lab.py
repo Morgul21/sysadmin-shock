@@ -77,6 +77,9 @@ class Scenario:
     lessons: tuple[int, ...] = ()
     # Regex dei comandi che svelerebbero la correzione: il guardrail di output del tutor.
     spoilers: tuple[str, ...] = ()
+    # Regex di un comando della history che dimostra fatto il passo dell'indizio corrispondente
+    # (la prima per l'indizio 1, ...): il tutor non ripete un passo che chi si esercita ha già fatto.
+    progress: tuple[str, ...] = ()
 
     @property
     def task(self) -> str:
@@ -128,9 +131,13 @@ def load_scenarios(directory: Path = SCENARIOS_DIR) -> list[Scenario]:
             path=toml_path.parent,
             lessons=tuple(meta.get("lessons", ())),
             spoilers=tuple(meta.get("spoilers", ())),
+            progress=tuple(meta.get("progress", ())),
         )
         if scenario.category not in CATEGORIES or scenario.difficulty not in DIFFICULTIES:
             raise ValueError(f"{scenario.id}: categoria o difficoltà non valida")
+        # L'ultimo indizio dice la causa: non c'è un passo dopo, quindi niente regola per lui.
+        if scenario.hints and len(scenario.progress) >= len(scenario.hints):
+            raise ValueError(f"{scenario.id}: `progress` deve avere meno regole degli indizi")
         if not known_lessons.issuperset(scenario.lessons):
             raise ValueError(f"{scenario.id}: rimanda a lezioni che non esistono: {scenario.lessons}")
         scenarios.append(scenario)

@@ -19,6 +19,13 @@ spoilers = [
     '\btruncate\s[^\n]{0,40}(?:report-export|/dev/shm/)',
 ]
 
+# Tutor: regex di un comando della history che dimostra fatto il passo di ogni indizio (l'ultimo
+# escluso). Il tutor parte dal primo indizio non ancora raggiunto, nella pagina o nel terminale.
+progress = [
+    '\bps\s|\bh?top\b',
+    '\bdf\b|memory\.stat|/dev/shm',
+]
+
 [ticket]
 from = "Sara (sviluppo)"
 subject = "Memoria piena ma non si capisce da cosa"

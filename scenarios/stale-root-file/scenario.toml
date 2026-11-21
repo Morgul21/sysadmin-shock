@@ -18,6 +18,13 @@ spoilers = [
     '\b(?:rm|unlink)\s+(?:-\S+\s+)*\S*last-start',
 ]
 
+# Tutor: regex di un comando della history che dimostra fatto il passo di ogni indizio (l'ultimo
+# escluso). Il tutor parte dal primo indizio non ancora raggiunto, nella pagina o nel terminale.
+progress = [
+    'last-start|/srv/app/data',
+    '(\bls\s+-\S*l\S*|\bstat|\bfind)\s.*(\bdata\b|last-start)|\bfind\s.*-user\b',
+]
+
 [ticket]
 from = "Luca (turno di notte)"
 subject = "L'app non riparte dopo il test di stanotte"

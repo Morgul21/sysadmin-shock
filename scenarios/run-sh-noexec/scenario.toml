@@ -17,6 +17,13 @@ spoilers = [
     '\bchmod\s+(?:-\S+\s+)*[ugoa,+=rwxXst0-7-]+\s+\S*run\.sh',
 ]
 
+# Tutor: regex di un comando della history che dimostra fatto il passo di ogni indizio (l'ultimo
+# escluso). Il tutor parte dal primo indizio non ancora raggiunto, nella pagina o nel terminale.
+progress = [
+    'run\.sh',
+    '(\bls\s+-\S*l\S*|\bstat)\s.*run\.sh',
+]
+
 [ticket]
 from = "Giulia (amministrazione)"
 subject = "Il gestionale non si apre"

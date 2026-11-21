@@ -18,6 +18,13 @@ spoilers = [
     '\bkill\s+(?:-\S+\s+)*\d+',
 ]
 
+# Tutor: regex di un comando della history che dimostra fatto il passo di ogni indizio (l'ultimo
+# escluso). Il tutor parte dal primo indizio non ancora raggiunto, nella pagina o nel terminale.
+progress = [
+    'memory\.max',
+    '\bps\s|\bh?top\b',
+]
+
 [ticket]
 from = "Giulia (amministrazione)"
 subject = "Errore di memoria"

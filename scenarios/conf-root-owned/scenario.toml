@@ -18,6 +18,13 @@ spoilers = [
     '\bchmod\s+(?:-\S+\s+)*[ugoa,+=rwxXst0-7-]+\s+\S*app\.conf',
 ]
 
+# Tutor: regex di un comando della history che dimostra fatto il passo di ogni indizio (l'ultimo
+# escluso). Il tutor parte dal primo indizio non ancora raggiunto, nella pagina o nel terminale.
+progress = [
+    'app\.conf',
+    '(\bls\s+-\S*l\S*|\bstat)\s.*app\.conf',
+]
+
 [ticket]
 from = "Andrea (IT)"
 subject = "Dopo il cambio password l'app non parte"

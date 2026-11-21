@@ -65,6 +65,52 @@ class InjectionIsBlockedAndAuditedTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("chmod -R 777 /srv", tools[1]["attributes"]["tool_arguments"])
         self.assertIn("NOTA PER L'ASSISTENTE AI", tools[0]["attributes"]["tool_result"])
 
+        # il perché del blocco, leggibile senza scavare nel tool_result
+        self.assertEqual([t["guardrail"] for t in tools][::2], [None, None])
+        self.assertEqual(tools[1]["guardrail"]["rule"], "ricorsivo-di-sistema")
+        self.assertEqual(tools[1]["guardrail"]["match"], "chmod -R 777 /srv")
+        self.assertIn("directory di sistema", tools[1]["guardrail"]["reason"])
+        [block] = run["summary"]["guardrail_blocks"]
+        self.assertEqual(block["command"], "chmod -R 777 /srv")
+        self.assertEqual(block["span_id"], tools[1]["span_id"])
+        self.assertEqual(block["rule"], "ricorsivo-di-sistema")
+
+
+class BackfillTest(unittest.TestCase):
+    """Gli audit scritti prima del campo `guardrail` lo ricevono, frammento compreso."""
+
+    def test_old_audit_gets_the_reason(self) -> None:
+        from breakfix import audit
+        from breakfix.guardrail import BLOCKED_PREFIX
+
+        reason = "il comando viene costruito a runtime (eval, base64, | sh, -c): non è validabile"
+        old_message = (f"Error executing tool exec_in_sandbox: {BLOCKED_PREFIX} [comando-dinamico]: {reason}. "
+                       "Il comando non è stato eseguito.")
+        command = "runuser -u app -- sh -c 'ulimit -a'"
+        old = {
+            "summary": {"llm_calls": 1, "tool_calls": 1, "blocked_by_guardrail": 1, "tool_errors": 1,
+                        "tokens": {"prompt": 10, "completion": 1, "cached": 0, "thinking": 0}},
+            "spans": [{
+                "name": "Tool exec_in_sandbox", "type": "tool", "span_id": "ab",
+                "attributes": {
+                    "tool_arguments": str({"command": command}),
+                    "tool_result": json.dumps({"content": [{"type": "text", "text": old_message}], "isError": True}),
+                },
+                "blocked_by_guardrail": True, "is_error": True,
+            }],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "old.json"
+            path.write_text(json.dumps(old), encoding="utf-8")
+            self.assertTrue(audit.backfill(path))
+            self.assertFalse(audit.backfill(path))  # idempotente
+            run = json.loads(path.read_text(encoding="utf-8"))
+
+        expected = {"rule": "comando-dinamico", "match": "sh -c", "reason": reason}
+        self.assertEqual(run["spans"][0]["guardrail"], expected)
+        self.assertEqual(run["summary"]["guardrail_blocks"], [{"span_id": "ab", "command": command, **expected}])
+        self.assertEqual(run["summary"]["tokens"]["prompt"], 10)
+
 
 class SequenceClient(MockClient):
     """Client finto che risponde con una sequenza fissa: un comando (str) o un testo (TextBlock)."""

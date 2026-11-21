@@ -97,6 +97,58 @@ class SpoilerRulesTest(unittest.TestCase):
                     self.assertIsNone(find_spoiler(text, s))
 
 
+# Per ogni scenario, comandi realistici e quanti passi dimostrano fatti (regole `progress`).
+PROGRESS = {
+    "cache-too-big": [("", 0), ("gestionale", 1), ("gestionale\nfree -m\ncat /sys/fs/cgroup/memory.max", 2)],
+    "conf-root-owned": [("gestionale", 0), ("cat /srv/app/run.sh\ncat /srv/app/app.conf", 1),
+                        ("ls -la /srv/app/app.conf", 2)],
+    "log-acl-deny": [("runuser -u app gestionale", 0), ("ls -la /var/log/app/app.log", 1),
+                     ("getfacl /var/log/app/app.log", 2)],
+    "memory-hog": [("gestionale", 0), ("cat /sys/fs/cgroup/memory.max", 1), ("ps aux --sort=-rss", 2)],
+    "run-sh-noexec": [("gestionale\ncat /usr/local/bin/gestionale", 0), ("cat /srv/app/run.sh", 1),
+                      ("stat /srv/app/run.sh", 2)],
+    "shm-full": [("gestionale", 0), ("ps aux --sort=-rss", 1), ("df -h", 2)],
+    "srv-no-traverse": [("cat /srv/app/run.sh", 0), ("ls -l /srv/app/run.sh", 1), ("namei -l /srv/app/run.sh", 2),
+                        ("ls -ld /srv", 2), ("stat /srv/", 2), ("ls -ld /srv/app", 0)],
+    "stale-root-file": [("gestionale", 0), ("cat /srv/app/data/last-start", 1), ("ls -l /srv/app/data", 2),
+                        ("find /srv/app -user root", 2)],
+}
+
+
+class ProgressTest(unittest.TestCase):
+    def test_every_scenario_has_valid_rules(self) -> None:
+        self.assertEqual(set(PROGRESS), {s.id for s in load_scenarios()})
+        for s in load_scenarios():
+            with self.subTest(s.id):
+                self.assertTrue(s.progress)
+                self.assertLess(len(s.progress), len(s.hints), "l'ultimo indizio non ha un passo dopo")
+                for rule in s.progress:
+                    re.compile(rule)
+
+    def test_the_commands_say_how_far_the_person_got(self) -> None:
+        for scenario_id, cases in PROGRESS.items():
+            for commands, steps in cases:
+                with self.subTest(scenario_id, commands=commands):
+                    self.assertEqual(tutor.steps_done(get_scenario(scenario_id), commands), steps)
+
+    def test_the_page_or_the_terminal_whichever_is_further(self) -> None:
+        s = get_scenario("log-acl-deny")
+        self.assertEqual(tutor.hint_level(s, "ls -l /var/log/app/app.log", 0), 1)
+        self.assertEqual(tutor.hint_level(s, "ls -l /var/log/app/app.log", 2), 2)
+        self.assertEqual(tutor.hint_level(s, "", 0), 0)
+
+    def test_a_step_already_done_is_not_repeated(self) -> None:
+        # Il caso visto in prova: log trovato, nessun indizio aperto. Il tetto era l'indizio 1, e il
+        # modello lo ripeteva ("guarda lo script e l'unità systemd"); ora è l'indizio 2, la ACL.
+        s = get_scenario("log-acl-deny")
+        history = ("runuser -u app gestionale\nls -la /var/log/app/app.log\nchmod 755 /var/log/app/app.log\n"
+                   "runuser -u app gestionale")
+        message = tutor.user_message("li ho messi i permessi, non parte", history, 0, s)
+        self.assertIn(s.hints[1], message)
+        self.assertNotIn(s.hints[0], message)
+        self.assertIn("Passi già fatti secondo i comandi: 1", message)
+
+
 class CannedClient(MockClient):
     """Client finto: risponde sempre lo stesso testo e registra cosa ha ricevuto."""
 

@@ -259,7 +259,7 @@ def write_draft(draft: Draft, directory: Path, *, man: str, model: str, trace: s
     toml = f"""\
 # Bozza generata da breakfix-author il {date.today().isoformat()} (modello {model}) a partire da {man}.
 # La sandbox l'ha validata (sana passa, rotta fallisce, riparata passa); una persona non l'ha ancora rivista.
-# Prima di spostarla in scenarios/ mancano: almeno 3 indizi, le regole `spoilers` del tutor, le lezioni.
+# Prima di spostarla in scenarios/ mancano: almeno 3 indizi, le regole `spoilers` e `progress` del tutor, le lezioni.
 # Registro dell'esecuzione: .breakfix/audit/*-{trace}.json
 title = {_toml_string(draft.title)}
 category = {_toml_string(draft.category)}
@@ -268,6 +268,7 @@ man = [{_toml_string(man)}]
 lessons = []
 hints = []
 spoilers = []
+progress = []
 
 [ticket]
 from = {_toml_string(draft.ticket_from)}

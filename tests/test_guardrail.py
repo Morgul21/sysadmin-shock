@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from breakfix.guardrail import check_command
+from breakfix.guardrail import check_command, parse_message
 
 
 BLOCKED = {
@@ -75,6 +75,22 @@ class GuardrailTest(unittest.TestCase):
         for command in ALLOWED:
             with self.subTest(command=command):
                 self.assertIsNone(check_command(command))
+
+    def test_message_names_the_offending_fragment(self) -> None:
+        cases = {
+            "runuser -u app -- sh -c 'ulimit -a'": ("comando-dinamico", "sh -c"),
+            "cat /sys/fs/cgroup/memory.max; python3 -c 'print(1)'": ("comando-dinamico", "python3 -c"),
+            "ls /srv && sudo chmod 777 /srv/app/run.sh": ("scrivibile-da-tutti", "chmod 777 /srv/app/run.sh"),
+        }
+        for command, (rule, match) in cases.items():
+            with self.subTest(command=command):
+                blocked = check_command(command)
+                self.assertEqual((blocked.rule, blocked.match), (rule, match))
+                self.assertIn(f"su `{match}`", blocked.message())
+                self.assertEqual(parse_message("Error executing tool: " + blocked.message()), blocked)
+
+    def test_parse_message_ignores_other_errors(self) -> None:
+        self.assertIsNone(parse_message("Error executing tool exec_in_sandbox: timeout"))
 
 
 if __name__ == "__main__":

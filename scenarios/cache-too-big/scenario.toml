@@ -19,6 +19,13 @@ spoilers = [
     'CACHE_MB\s*=\s*(?!512\b)\d+',
 ]
 
+# Tutor: regex di un comando della history che dimostra fatto il passo di ogni indizio (l'ultimo
+# escluso). Il tutor parte dal primo indizio non ancora raggiunto, nella pagina o nel terminale.
+progress = [
+    '\bgestionale\b',
+    'memory\.max',
+]
+
 [ticket]
 from = "Andrea (IT)"
 subject = "Memoria insufficiente dopo il tuning"

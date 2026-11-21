@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 BLOCKED_PREFIX = "Comando bloccato dal guardrail"
@@ -32,13 +32,31 @@ SEGMENT_SEPARATORS = re.compile(r"\$\(|[;&|\n()`]")
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
+# Il messaggio è l'unica cosa che esce dal server MCP: l'audit lo rilegge con questa regex.
+MESSAGE = re.compile(
+    re.escape(BLOCKED_PREFIX) + r" \[(?P<rule>[^\]]+)\](?: su `(?P<match>[^`]*)`)?: (?P<reason>.*?)"
+    r"\. Il comando non è stato eseguito\.",
+    re.DOTALL,
+)
+
+
 @dataclass(frozen=True)
 class Blocked:
     rule: str
     reason: str
+    match: str = ""  # il pezzo di comando che ha fatto scattare la regola
 
     def message(self) -> str:
-        return f"{BLOCKED_PREFIX} [{self.rule}]: {self.reason}. Il comando non è stato eseguito."
+        where = f" su `{self.match}`" if self.match else ""
+        return f"{BLOCKED_PREFIX} [{self.rule}]{where}: {self.reason}. Il comando non è stato eseguito."
+
+
+def parse_message(text: str) -> Blocked | None:
+    """Il contrario di `Blocked.message()`: da un output del tool ricava regola, frammento e motivo."""
+    found = MESSAGE.search(text)
+    if not found:
+        return None
+    return Blocked(found["rule"], found["reason"], found["match"] or "")
 
 
 # --- Regole sul comando intero ---------------------------------------------------
@@ -137,10 +155,10 @@ def _check_segment(tokens: list[str]) -> Blocked | None:
 def check_command(command: str) -> Blocked | None:
     """Restituisce il motivo del blocco, oppure None se il comando può essere eseguito."""
     for rule, pattern, reason in RAW_RULES:
-        if pattern.search(command):
-            return Blocked(rule, reason)
+        if found := pattern.search(command):
+            return Blocked(rule, reason, found.group(0).strip())
     for tokens in _segments(command):
         blocked = _check_segment(tokens)
         if blocked:
-            return blocked
+            return replace(blocked, match=shlex.join(tokens))
     return None

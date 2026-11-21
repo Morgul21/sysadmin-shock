@@ -706,8 +706,8 @@ registra ogni tentativo con i file proposti e l'esito.
 test finché una persona non le ha riviste. Non è una cautela formale: i test chiedono a ogni
 scenario almeno 3 indizi e le regole anti-spoiler, e bloccano il build se mancano. Per promuovere una
 bozza: la si prova (`breakfix-author start <id>`, `breakfix-sandbox shell`, `breakfix-author check`), si
-scrivono indizi, `spoilers` e `lessons`, si aggiungono le correzioni alternative a `SPOILERS` in
-[test_tutor.py](tests/test_tutor.py), e si sposta la cartella in `scenarios/` (il test sul numero di
+scrivono indizi, `spoilers`, `progress` e `lessons`, si aggiungono le correzioni alternative a `SPOILERS`
+e qualche history realistica a `PROGRESS` in [test_tutor.py](tests/test_tutor.py), e si sposta la cartella in `scenarios/` (il test sul numero di
 scenari oggi ne ammette al massimo 8).
 
 `break.sh` lo scrive un modello e gira come root nella sandbox senza passare dal guardrail, come le
@@ -1013,3 +1013,8 @@ Dove il design è stato sfidato e cosa è cambiato dopo. Il coding agent usato �
   server") no: lì serve il guardrail di output, ed è il motivo per cui il system prompt non basta.
 - Per vedere a che punto è chi si esercita, il tutor legge la history di bash nella sandbox. Bash però la
   scrive solo all'uscita: nell'immagine c'è `PROMPT_COMMAND='history -a'`, che la scrive dopo ogni comando.
+- Il tetto all'indizio non basta se conta solo gli indizi aperti nella pagina: chi aveva già trovato il log
+  con `ls -la` senza aprirne nessuno si sentiva ripetere l'indizio 1. Il modello aveva i comandi e la regola
+  "non ripetere un passo fatto", ma tra le due istruzioni sceglieva il tetto. Ora il livello lo calcola il
+  codice: le regole `progress` di `scenario.toml` (una regex per indizio) riconoscono nella history i passi
+  fatti, e il tetto è il più avanti tra pagina e terminale. Il tutor vede i comandi, non il loro output.
